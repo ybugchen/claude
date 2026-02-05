@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo List - Claude Code Demo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📝 Todo List</h1>
+      <p class="subtitle">Claude Code 演示项目</p>
+    </header>
+
+    <main>
+      <div class="input-section">
+        <input
+          type="text"
+          id="todoInput"
+          placeholder="添加新任务..."
+          autocomplete="off"
+        >
+        <select id="prioritySelect" class="priority-select">
+          <option value="low">低优先级</option>
+          <option value="medium" selected>中优先级</option>
+          <option value="high">高优先级</option>
+        </select>
+        <button id="addBtn">添加</button>
+      </div>
+
+      <div class="stats">
+        <span>总计: <strong id="totalCount">0</strong></span>
+        <span>待完成: <strong id="activeCount">0</strong></span>
+        <span>已完成: <strong id="completedCount">0</strong></span>
+      </div>
+
+      <ul id="todoList" class="todo-list"></ul>
+
+      <div id="emptyState" class="empty-state">
+        <p>🎉 暂无任务，添加一个开始吧！</p>
+      </div>
+    </main>
+
+    <footer>
+      <p>使用 Express + Vanilla JS 构建 | Powered by Claude Code</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
