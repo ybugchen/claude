@@ -12,6 +12,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run a single test by name**: `npx jest -t "should create a new todo"`
 - **Lint**: `npm run lint`
 
+## Project structure
+
+```
+├── src/                    # Backend source code
+│   ├── server.js           # Express app entry point (middleware, static serving, route mounting)
+│   ├── routes/
+│   │   └── todos.js        # RESTful CRUD endpoints for /api/todos
+│   └── data/
+│       └── store.js        # In-memory data store (getAll/getById/create/update/delete/reset)
+├── public/                 # Frontend static files (served by Express)
+│   ├── index.html          # Main HTML page
+│   ├── styles.css          # Styles (responsive, priority badge colors)
+│   └── app.js              # Frontend logic (fetch API calls, DOM rendering)
+├── __tests__/
+│   └── server.test.js      # Integration tests (supertest against Express app)
+├── .github/
+│   └── copilot-instructions.md  # AI agent guidance
+├── package.json            # Dependencies and npm scripts
+├── jest.config.js          # Jest test configuration
+└── .eslintrc.json          # ESLint rules
+```
+
 ## Architecture
 
 Express.js backend serving a vanilla JS frontend as static files. All state is in-memory (resets on restart).
