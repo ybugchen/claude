@@ -50,3 +50,49 @@ Express.js backend serving a vanilla JS frontend as static files. All state is i
 - Todo items have: id, title, completed, priority, createdAt, updatedAt
 - Priority values are validated as enum: `low`, `medium`, `high` (default: `medium`)
 - Frontend escapes HTML via DOM textContent to prevent XSS
+
+## Hooks
+
+Claude Code hooks are configured in `.github/hooks/hooks.json`. They run shell commands automatically on specific events.
+
+### Available events
+
+| Event | Trigger | Use case |
+|---|---|---|
+| `PreToolUse` | Before a tool executes | Block or validate tool calls (e.g., run tests before `git commit`) |
+| `PostToolUse` | After a tool executes | Post-processing (e.g., lint after file edits) |
+| `Notification` | When a notification fires | Custom alerts |
+| `Stop` | When the agent stops | Cleanup tasks |
+| `SubagentStop` | When a subagent stops | Subagent cleanup |
+
+### Hook format
+
+```json
+{
+  "hooks": {
+    "<Event>": [
+      {
+        "matcher": "<ToolName>",
+        "type": "command",
+        "command": "<shell command>"
+      }
+    ]
+  }
+}
+```
+
+- `matcher` (optional): Tool name to match (e.g., `Bash`, `Edit`, `Write`). Only for `PreToolUse`/`PostToolUse`
+- `type`: Always `"command"`
+- `command`: Shell command to run. Exit code non-zero blocks the action (for `PreToolUse`)
+- Environment variable `$TOOL_INPUT` contains the tool's input as JSON
+
+### Current hooks in this project
+
+- **Pre-commit test gate**: Before any `git commit`, automatically runs `npm test`. If tests fail, the commit is blocked
+
+### Guidelines for adding hooks
+
+- Keep hooks fast — slow hooks degrade the development experience
+- Always run `npm test` before commits to prevent broken code from being committed
+- Use `matcher` to scope hooks narrowly (e.g., only `Bash` tool, not all tools)
+- Test hook commands manually before adding them to `hooks.json`
