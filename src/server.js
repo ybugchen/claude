@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const todoRoutes = require('./routes/todos');
+const gameAnalyticsRoutes = require('./routes/gameAnalytics');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,6 +14,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Routes
 app.use('/api/todos', todoRoutes);
+app.use('/api/game-analytics', gameAnalyticsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

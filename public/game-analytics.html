@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>游戏版本分析仪表盘</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
+    .header { background: linear-gradient(135deg, #1e293b, #334155); padding: 24px 32px; border-bottom: 1px solid #475569; }
+    .header h1 { font-size: 24px; color: #f1f5f9; }
+    .header p { color: #94a3b8; font-size: 14px; margin-top: 4px; }
+    .header-actions { display: flex; gap: 12px; margin-top: 12px; }
+    .header-actions button { padding: 8px 16px; border: 1px solid #475569; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .header-actions button:hover { background: #334155; }
+    .header-actions button.active { background: #3b82f6; border-color: #3b82f6; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .loading { text-align: center; padding: 80px; font-size: 18px; color: #94a3b8; }
+
+    /* Score cards */
+    .score-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .score-card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; text-align: center; }
+    .score-card .label { font-size: 13px; color: #94a3b8; margin-bottom: 8px; }
+    .score-card .score { font-size: 36px; font-weight: 700; }
+    .score-card .grade { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 14px; font-weight: 600; margin-top: 6px; }
+    .grade-S { background: #16a34a; color: white; }
+    .grade-A { background: #2563eb; color: white; }
+    .grade-B { background: #7c3aed; color: white; }
+    .grade-C { background: #d97706; color: white; }
+    .grade-D { background: #ea580c; color: white; }
+    .grade-F { background: #dc2626; color: white; }
+
+    /* Section */
+    .section { background: #1e293b; border-radius: 12px; padding: 24px; border: 1px solid #334155; margin-bottom: 20px; }
+    .section h2 { font-size: 18px; color: #f1f5f9; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #334155; }
+    .section h3 { font-size: 15px; color: #cbd5e1; margin: 16px 0 10px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; background: #334155; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #475569; }
+    td { padding: 10px 12px; border-bottom: 1px solid #1e293b; }
+    tr:hover td { background: rgba(59,130,246,0.05); }
+
+    /* Bar chart */
+    .bar-chart { display: flex; flex-direction: column; gap: 8px; }
+    .bar-row { display: flex; align-items: center; gap: 12px; }
+    .bar-label { width: 120px; font-size: 13px; color: #94a3b8; text-align: right; flex-shrink: 0; }
+    .bar-track { flex: 1; background: #334155; border-radius: 4px; height: 24px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; color: white; font-weight: 600; min-width: 32px; transition: width 0.5s; }
+    .bar-value { width: 60px; font-size: 13px; color: #cbd5e1; text-align: right; flex-shrink: 0; }
+
+    /* Funnel */
+    .funnel { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .funnel-step { display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: 600; padding: 12px; border-radius: 6px; text-align: center; }
+
+    /* Grid layouts */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    /* Recommendation cards */
+    .rec-card { background: #0f172a; border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid; }
+    .rec-card.high { border-left-color: #ef4444; }
+    .rec-card.medium { border-left-color: #f59e0b; }
+    .rec-card.low { border-left-color: #3b82f6; }
+    .rec-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .rec-category { font-size: 12px; color: #94a3b8; background: #334155; padding: 2px 8px; border-radius: 4px; }
+    .rec-priority { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+    .rec-priority.high { background: rgba(239,68,68,0.2); color: #fca5a5; }
+    .rec-priority.medium { background: rgba(245,158,11,0.2); color: #fcd34d; }
+    .rec-priority.low { background: rgba(59,130,246,0.2); color: #93c5fd; }
+    .rec-issue { font-size: 14px; color: #e2e8f0; margin-bottom: 6px; }
+    .rec-suggestion { font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+    .rec-impact { font-size: 12px; color: #22d3ee; }
+
+    /* Metric inline */
+    .metric { display: inline-block; margin-right: 24px; margin-bottom: 8px; }
+    .metric .val { font-size: 20px; font-weight: 700; color: #f1f5f9; }
+    .metric .lbl { font-size: 12px; color: #94a3b8; }
+
+    /* Tabs */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Data quality bar */
+    .data-summary { display: flex; gap: 24px; flex-wrap: wrap; }
+    .data-stat { text-align: center; }
+    .data-stat .num { font-size: 24px; font-weight: 700; }
+    .data-stat .desc { font-size: 12px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>游戏版本数据分析仪表盘</h1>
+    <p id="versionSubtitle">加载中...</p>
+    <div class="header-actions">
+      <button class="active" onclick="showTab('overview')">综合评估</button>
+      <button onclick="showTab('cleaning')">数据清洗</button>
+      <button onclick="showTab('segmentation')">用户分层</button>
+      <button onclick="showTab('content')">内容分析</button>
+      <button onclick="showTab('items')">道具转化</button>
+      <button onclick="showTab('recommendations')">优化建议</button>
+      <button onclick="refreshData()">刷新数据</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="loading" class="loading">正在生成分析报告...</div>
+    <div id="dashboard" style="display:none;">
+
+      <!-- Overview Tab -->
+      <div id="tab-overview" class="tab-content active"></div>
+
+      <!-- Cleaning Tab -->
+      <div id="tab-cleaning" class="tab-content"></div>
+
+      <!-- Segmentation Tab -->
+      <div id="tab-segmentation" class="tab-content"></div>
+
+      <!-- Content Tab -->
+      <div id="tab-content" class="tab-content"></div>
+
+      <!-- Items Tab -->
+      <div id="tab-items" class="tab-content"></div>
+
+      <!-- Recommendations Tab -->
+      <div id="tab-recommendations" class="tab-content"></div>
+    </div>
+  </div>
+
+  <script>
+    let reportData = null;
+
+    async function loadData() {
+      try {
+        const res = await fetch('/api/game-analytics/full-report');
+        reportData = await res.json();
+        renderDashboard();
+      } catch (err) {
+        document.getElementById('loading').textContent = '加载失败: ' + err.message;
+      }
+    }
+
+    async function refreshData() {
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('dashboard').style.display = 'none';
+      try {
+        await fetch('/api/game-analytics/refresh', { method: 'POST' });
+        const res = await fetch('/api/game-analytics/full-report');
+        reportData = await res.json();
+        renderDashboard();
+      } catch (err) {
+        document.getElementById('loading').textContent = '刷新失败: ' + err.message;
+      }
+    }
+
+    function showTab(name) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      document.querySelectorAll('.header-actions button').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    function e(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function renderDashboard() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+
+      const v = reportData.versionInfo;
+      document.getElementById('versionSubtitle').textContent =
+        `${v.versionName} (${v.versionId}) | ${v.releaseDate} ~ ${v.dataEndDate} | 生成时间: ${new Date(reportData.generatedAt).toLocaleString()}`;
+
+      renderOverview();
+      renderCleaning();
+      renderSegmentation();
+      renderContent();
+      renderItems();
+      renderRecommendations();
+    }
+
+    function renderOverview() {
+      const a = reportData.assessment;
+      const os = a.overallScore;
+      const el = document.getElementById('tab-overview');
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">综合评分</div>
+            <div class="score" style="color:${scoreColor(os.score)}">${os.score}</div>
+            <div class="grade grade-${os.grade}">${os.grade}</div>
+          </div>
+          ${Object.entries(os.breakdown).map(([key, val]) => `
+            <div class="score-card">
+              <div class="label">${labelMap[key] || key} (${val.weight})</div>
+              <div class="score" style="color:${scoreColor(val.score)}">${val.score}</div>
+              <div class="grade grade-${val.grade}">${val.grade}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>关键商业指标</h2>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.payingRate}%</div><div class="lbl">付费率</div></div>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.arppu}</div><div class="lbl">ARPPU (元)</div></div>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.arpu}</div><div class="lbl">ARPU (元)</div></div>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.totalRevenue}</div><div class="lbl">版本总收入</div></div>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.repeatPurchaseRate}%</div><div class="lbl">复购率</div></div>
+          </div>
+          <div class="section">
+            <h2>用户健康指标</h2>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.day7Retention}%</div><div class="lbl">7日留存</div></div>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.day28Retention}%</div><div class="lbl">28日留存</div></div>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.avgOnlineMinutes}分钟</div><div class="lbl">日均在线</div></div>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.highActivePercent}%</div><div class="lbl">高活跃占比</div></div>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.churnRiskPercent}%</div><div class="lbl">流失风险占比</div></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>商业化评分明细</h2>
+          <div class="bar-chart">
+            ${Object.entries(a.commercialization.details).map(([k, v]) => `
+              <div class="bar-row">
+                <div class="bar-label">${detailLabel[k] || k}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${v}%;background:${scoreColor(v)}">${v}</div></div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCleaning() {
+      const c = reportData.cleanReport;
+      const dq = reportData.assessment.dataQuality;
+      const el = document.getElementById('tab-cleaning');
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">数据质量评分</div>
+            <div class="score" style="color:${scoreColor(dq.score)}">${dq.score}</div>
+            <div class="grade grade-${dq.grade}">${dq.grade}</div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>数据清洗概览</h2>
+          <div class="data-summary">
+            <div class="data-stat"><div class="num">${dq.totalOriginalRecords}</div><div class="desc">原始记录总数</div></div>
+            <div class="data-stat"><div class="num" style="color:#ef4444">${dq.removedRecords}</div><div class="desc">移除记录</div></div>
+            <div class="data-stat"><div class="num" style="color:#f59e0b">${dq.fixedRecords}</div><div class="desc">修复记录</div></div>
+            <div class="data-stat"><div class="num">${dq.errorRate}%</div><div class="desc">异常率</div></div>
+            <div class="data-stat"><div class="num">${dq.issueCount}</div><div class="desc">问题总数</div></div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>各数据集清洗详情</h2>
+          <table>
+            <tr><th>数据集</th><th>原始数量</th><th>清洗后</th><th>移除</th><th>修复</th></tr>
+            ${['players','loginRecords','contentExperience','itemTransactions'].map(k => `
+              <tr>
+                <td>${k}</td>
+                <td>${c.original[k]}</td>
+                <td>${c.cleaned[k]}</td>
+                <td style="color:#ef4444">${c.removedRecords[k]}</td>
+                <td style="color:#f59e0b">${c.fixedRecords[k] || 0}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+        <div class="section">
+          <h2>问题明细（前20条）</h2>
+          <table>
+            <tr><th>类型</th><th>数据集</th><th>原因</th></tr>
+            ${c.issues.slice(0, 20).map(issue => `
+              <tr>
+                <td><span style="color:${issue.type==='removed'?'#ef4444':'#f59e0b'}">${issue.type==='removed'?'移除':'修复'}</span></td>
+                <td>${e(issue.field)}</td>
+                <td>${e(issue.reason)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderSegmentation() {
+      const seg = reportData.segmentation;
+      const el = document.getElementById('tab-segmentation');
+
+      el.innerHTML = `
+        <div class="section">
+          <h2>概览指标</h2>
+          <div class="metric"><div class="val">${seg.summary.totalPlayers}</div><div class="lbl">总玩家</div></div>
+          <div class="metric"><div class="val">${seg.summary.payingRate}%</div><div class="lbl">付费率</div></div>
+          <div class="metric"><div class="val">${seg.summary.arppu}</div><div class="lbl">ARPPU</div></div>
+          <div class="metric"><div class="val">${seg.summary.arpu}</div><div class="lbl">ARPU</div></div>
+          <div class="metric"><div class="val">${seg.summary.day7Retention}%</div><div class="lbl">7日留存</div></div>
+          <div class="metric"><div class="val">${seg.summary.day28Retention}%</div><div class="lbl">28日留存</div></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>付费分层</h2>
+            <table>
+              <tr><th>层级</th><th>人数</th><th>占比</th><th>平均活跃天</th><th>版本付费</th><th>7日留存</th><th>28日留存</th></tr>
+              ${Object.entries(seg.paySegments).map(([tier, d]) => `
+                <tr>
+                  <td><strong>${e(tier)}</strong></td>
+                  <td>${d.playerCount}</td>
+                  <td>${d.percentage}%</td>
+                  <td>${d.avgActiveDays}</td>
+                  <td>${d.avgVersionPay}</td>
+                  <td>${d.retentionDay7}%</td>
+                  <td>${d.retentionDay28}%</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>活跃度分层</h2>
+            <div class="bar-chart">
+              ${Object.entries(seg.activitySegments).map(([level, d]) => `
+                <div class="bar-row">
+                  <div class="bar-label">${e(level)}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${d.percentage}%;background:${activityColor(level)}">${d.percentage}%</div></div>
+                  <div class="bar-value">${d.playerCount}人</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>生命周期分层</h2>
+          <table>
+            <tr><th>阶段</th><th>人数</th><th>占比</th><th>平均活跃天</th><th>版本付费</th><th>28日留存</th></tr>
+            ${Object.entries(seg.lifecycleSegments).map(([stage, d]) => `
+              <tr>
+                <td><strong>${e(stage)}</strong></td>
+                <td>${d.playerCount}</td>
+                <td>${d.percentage}%</td>
+                <td>${d.avgActiveDays}</td>
+                <td>${d.avgVersionPay}</td>
+                <td>${d.retentionDay28}%</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>付费 x 活跃度 交叉分析</h2>
+          <table>
+            <tr><th>付费\\活跃</th><th>高活跃</th><th>中活跃</th><th>低活跃</th><th>流失风险</th></tr>
+            ${Object.entries(seg.crossAnalysis).map(([pay, acts]) => `
+              <tr>
+                <td><strong>${e(pay)}</strong></td>
+                ${['高活跃','中活跃','低活跃','流失风险'].map(act => `
+                  <td>${acts[act]?.count || 0}人 (${acts[act]?.avgVersionPay || 0}元)</td>
+                `).join('')}
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderContent() {
+      const ca = reportData.contentAnalysis;
+      const cq = reportData.assessment.contentQuality;
+      const el = document.getElementById('tab-content');
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">内容质量评分</div>
+            <div class="score" style="color:${scoreColor(cq.avgScore)}">${cq.avgScore}</div>
+            <div class="grade grade-${cq.grade}">${cq.grade}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">最佳内容</div>
+            <div class="score" style="font-size:18px;margin-top:12px">${e(cq.topContent)}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">待优化内容</div>
+            <div class="score" style="font-size:18px;margin-top:12px">${e(cq.bottomContent)}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>内容参与漏斗</h2>
+          <div class="funnel">
+            ${[
+              { label: '全部玩家', val: ca.contentFunnel.totalPlayers, pct: '100%', color: '#475569' },
+              { label: '接触新内容', val: ca.contentFunnel.touchedNewContent, pct: ca.contentFunnel.touchedRate + '%', color: '#3b82f6' },
+              { label: '参与3+内容', val: ca.contentFunnel.multiContentPlayers, pct: ca.contentFunnel.multiContentRate + '%', color: '#7c3aed' },
+              { label: '全内容体验', val: ca.contentFunnel.allContentPlayers, pct: ca.contentFunnel.allContentRate + '%', color: '#d97706' },
+              { label: '深度参与', val: ca.contentFunnel.deepEngagedPlayers, pct: ca.contentFunnel.deepEngagedRate + '%', color: '#16a34a' },
+            ].map((step, i, arr) => `
+              <div class="funnel-step" style="width:${100 - i*15}%;background:${step.color}">
+                ${e(step.label)}: ${step.val}人 (${step.pct})
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>各内容评分明细</h2>
+          <table>
+            <tr><th>内容</th><th>类型</th><th>综合评分</th><th>参与度</th><th>完成度</th><th>满意度</th><th>粘性</th><th>等级</th></tr>
+            ${Object.entries(cq.contentScores).map(([id, s]) => `
+              <tr>
+                <td><strong>${e(s.name)}</strong></td>
+                <td>${e(s.type)}</td>
+                <td style="color:${scoreColor(s.score)};font-weight:700">${s.score}</td>
+                <td>${s.details.participationScore}</td>
+                <td>${s.details.completionScore}</td>
+                <td>${s.details.satisfactionScore}</td>
+                <td>${s.details.engagementScore}</td>
+                <td><span class="grade grade-${s.grade}">${s.grade}</span></td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>内容对留存的影响</h2>
+            <table>
+              <tr><th></th><th>7日留存</th><th>14日留存</th><th>28日留存</th></tr>
+              <tr>
+                <td>参与新内容</td>
+                <td>${ca.contentRetentionImpact.participatedRetention.day7}%</td>
+                <td>${ca.contentRetentionImpact.participatedRetention.day14}%</td>
+                <td>${ca.contentRetentionImpact.participatedRetention.day28}%</td>
+              </tr>
+              <tr>
+                <td>未参与</td>
+                <td>${ca.contentRetentionImpact.nonParticipatedRetention.day7}%</td>
+                <td>${ca.contentRetentionImpact.nonParticipatedRetention.day14}%</td>
+                <td>${ca.contentRetentionImpact.nonParticipatedRetention.day28}%</td>
+              </tr>
+              <tr style="color:#22d3ee;font-weight:600">
+                <td>留存提升</td>
+                <td>+${ca.contentRetentionImpact.retentionLift.day7}pp</td>
+                <td>+${ca.contentRetentionImpact.retentionLift.day14}pp</td>
+                <td>+${ca.contentRetentionImpact.retentionLift.day28}pp</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>内容类型对比</h2>
+            <table>
+              <tr><th>类型</th><th>参与率</th><th>平均次数</th><th>完成率</th><th>满意度</th></tr>
+              ${Object.entries(ca.typeComparison).map(([type, d]) => `
+                <tr>
+                  <td><strong>${e(type)}</strong></td>
+                  <td>${d.participationRate}%</td>
+                  <td>${d.avgTimes}</td>
+                  <td>${d.avgCompletion}%</td>
+                  <td>${d.avgSatisfaction}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>满意度排名</h2>
+          <div class="bar-chart">
+            ${ca.satisfactionRanking.map(item => `
+              <div class="bar-row">
+                <div class="bar-label">${e(item.name)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${item.avgSatisfaction/5*100}%;background:${scoreColor(item.avgSatisfaction/5*100)}">${item.avgSatisfaction}</div></div>
+                <div class="bar-value">${item.participantCount}人</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderItems() {
+      const ic = reportData.itemConversion;
+      const el = document.getElementById('tab-items');
+
+      el.innerHTML = `
+        <div class="section">
+          <h2>收入结构</h2>
+          <div class="metric"><div class="val">${ic.revenueStructure.totalRevenue}</div><div class="lbl">总收入</div></div>
+          <div class="metric"><div class="val">${ic.revenueStructure.rmbRevenue} (${ic.revenueStructure.rmbPercentage}%)</div><div class="lbl">RMB收入</div></div>
+          <div class="metric"><div class="val">${ic.revenueStructure.diamondRevenue} (${ic.revenueStructure.diamondPercentage}%)</div><div class="lbl">钻石收入</div></div>
+        </div>
+
+        <div class="section">
+          <h2>付费转化漏斗</h2>
+          <div class="funnel">
+            ${[
+              { label: '全部玩家', val: ic.paymentFunnel.totalPlayers, pct: '100%', color: '#475569' },
+              { label: '任意购买', val: ic.paymentFunnel.anyPurchase.count, pct: ic.paymentFunnel.anyPurchase.rate + '%', color: '#3b82f6' },
+              { label: '钻石购买', val: ic.paymentFunnel.diamondPurchase.count, pct: ic.paymentFunnel.diamondPurchase.rate + '%', color: '#7c3aed' },
+              { label: 'RMB购买', val: ic.paymentFunnel.rmbPurchase.count, pct: ic.paymentFunnel.rmbPurchase.rate + '%', color: '#d97706' },
+              { label: '高价值购买', val: ic.paymentFunnel.highValuePurchase.count, pct: ic.paymentFunnel.highValuePurchase.rate + '%', color: '#16a34a' },
+            ].map((step, i) => `
+              <div class="funnel-step" style="width:${100 - i*15}%;background:${step.color}">
+                ${e(step.label)}: ${step.val}人 (${step.pct})
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>道具销售明细</h2>
+          <table>
+            <tr><th>道具</th><th>类型</th><th>单价</th><th>购买人数</th><th>购买率</th><th>总销量</th><th>总收入</th><th>人均购买</th></tr>
+            ${Object.entries(ic.itemSalesOverview).sort((a,b) => b[1].totalRevenue - a[1].totalRevenue).map(([id, d]) => `
+              <tr>
+                <td><strong>${e(d.name)}</strong></td>
+                <td>${e(d.type)}</td>
+                <td>${d.unitPrice} ${e(d.currency)}</td>
+                <td>${d.buyerCount}</td>
+                <td>${d.purchaseRate}%</td>
+                <td>${d.totalQuantity}</td>
+                <td style="font-weight:600">${d.totalRevenue}</td>
+                <td>${d.avgQuantityPerBuyer}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>道具消耗率分析</h2>
+            <div class="bar-chart">
+              ${Object.entries(ic.consumptionAnalysis).map(([type, d]) => `
+                <div class="bar-row">
+                  <div class="bar-label">${e(type)}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${d.consumptionRate}%;background:${d.consumptionRate>60?'#16a34a':d.consumptionRate>40?'#d97706':'#ef4444'}">${d.consumptionRate}%</div></div>
+                  <div class="bar-value">余${d.surplus}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>商业关键指标</h2>
+            <div class="metric"><div class="val">${ic.commercialMetrics.payingRate}%</div><div class="lbl">付费率</div></div>
+            <div class="metric"><div class="val">${ic.commercialMetrics.arppu}</div><div class="lbl">ARPPU</div></div>
+            <div class="metric"><div class="val">${ic.commercialMetrics.arpu}</div><div class="lbl">ARPU</div></div>
+            <div class="metric"><div class="val">${ic.commercialMetrics.rmbSpenderCount}</div><div class="lbl">RMB付费人数</div></div>
+            <h3>热销道具TOP5</h3>
+            ${ic.commercialMetrics.topSellingItems.map((item, i) => `
+              <div style="display:flex;align-items:center;gap:8px;margin:6px 0">
+                <span style="color:#94a3b8">#${i+1}</span>
+                <strong>${e(item.name)}</strong>
+                <span style="color:#22d3ee">${item.revenue}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>各付费层级道具偏好</h2>
+          <table>
+            <tr><th>付费层级</th><th>总消费</th><th>交易次数</th><th>偏好道具类型</th></tr>
+            ${Object.entries(ic.tierPreferences).map(([tier, d]) => `
+              <tr>
+                <td><strong>${e(tier)}</strong></td>
+                <td>${d.totalSpending}</td>
+                <td>${d.transactionCount}</td>
+                <td>${d.topItemTypes.map(t => e(t.type) + '(' + t.amount + ')').join(', ')}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderRecommendations() {
+      const recs = reportData.assessment.recommendations;
+      const el = document.getElementById('tab-recommendations');
+
+      const priorityMap = { '高': 'high', '中': 'medium', '低': 'low' };
+      el.innerHTML = `
+        <div class="section">
+          <h2>优化建议 (${recs.length}条)</h2>
+          <p style="color:#94a3b8;margin-bottom:16px;font-size:13px">按优先级排序，红色为高优先级，橙色为中优先级，蓝色为低优先级</p>
+          ${recs.map(rec => `
+            <div class="rec-card ${priorityMap[rec.priority]}">
+              <div class="rec-header">
+                <span class="rec-category">${e(rec.category)}</span>
+                <span class="rec-priority ${priorityMap[rec.priority]}">优先级: ${e(rec.priority)}</span>
+              </div>
+              <div class="rec-issue">${e(rec.issue)}</div>
+              <div class="rec-suggestion">${e(rec.suggestion)}</div>
+              <div class="rec-impact">预期效果: ${e(rec.expectedImpact)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Helpers
+    const labelMap = { contentQuality: '内容质量', commercialization: '商业化', userHealth: '用户健康', dataQuality: '数据质量' };
+    const detailLabel = { payRateScore: '付费率', arppuScore: 'ARPPU', repeatScore: '复购率', diversityScore: '收入多样性' };
+
+    function scoreColor(score) {
+      if (score >= 80) return '#16a34a';
+      if (score >= 60) return '#2563eb';
+      if (score >= 40) return '#d97706';
+      return '#ef4444';
+    }
+
+    function activityColor(level) {
+      const colors = { '高活跃': '#16a34a', '中活跃': '#3b82f6', '低活跃': '#d97706', '流失风险': '#ef4444' };
+      return colors[level] || '#475569';
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
