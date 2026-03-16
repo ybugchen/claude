@@ -32,8 +32,8 @@ function generateAssessment(segmentation, contentAnalysis, itemConversion, clean
     ? assessPlanVsActual(planningContext, contentAnalysis, segmentation, commercialization, userHealth)
     : null;
 
-  // 8. 下版本内容建议（基于全部分析维度 + 策划上下文）
-  const nextVersionSuggestions = generateNextVersionSuggestions(
+  // 8. 下版本策划文档（四板块结构：内容题材/道具定价/数值模型/目标用户）
+  const nextVersionPlan = generateNextVersionPlan(
     contentQuality, commercialization, userHealth,
     contentAnalysis, itemConversion, segmentation,
     planVsActual, planningContext
@@ -47,7 +47,7 @@ function generateAssessment(segmentation, contentAnalysis, itemConversion, clean
     overallScore,
     recommendations,
     planVsActual,
-    nextVersionSuggestions,
+    nextVersionPlan,
   };
 }
 
@@ -56,7 +56,10 @@ function generateAssessment(segmentation, contentAnalysis, itemConversion, clean
 // ============================================================
 
 function assessPlanVsActual(planningContext, contentAnalysis, segmentation, commercialization, userHealth) {
-  const { targetMetrics, contentDesignIntent, versionGoals } = planningContext;
+  // 兼容新旧结构
+  const targetMetrics = (planningContext.numericalModel && planningContext.numericalModel.targetMetrics) || planningContext.targetMetrics;
+  const contentDesignIntent = (planningContext.numericalModel && planningContext.numericalModel.contentDesignIntent) || planningContext.contentDesignIntent;
+  const versionGoals = (planningContext.targetUsers && planningContext.targetUsers.versionGoals) || planningContext.versionGoals;
   const { summary } = segmentation;
   const { contentOverview } = contentAnalysis;
 
@@ -205,203 +208,443 @@ function reviewGoal(goal, contentAnalysis, segmentation, commercialization, user
 }
 
 // ============================================================
-// 下版本内容建议
+// 下版本策划文档生成（四板块：内容题材/道具定价/数值模型/目标用户）
 // ============================================================
 
-function generateNextVersionSuggestions(
+function generateNextVersionPlan(
   contentQuality, commercialization, userHealth,
   contentAnalysis, itemConversion, segmentation,
   planVsActual, planningContext
 ) {
-  const suggestions = [];
-
-  // ---- 1. 基于内容类型表现推荐 ----
   const typeComparison = contentAnalysis.typeComparison;
+  const funnel = contentAnalysis.contentFunnel;
+  const retImpact = contentAnalysis.contentRetentionImpact;
+  const revenue = itemConversion.revenueStructure;
+  const consumption = itemConversion.consumptionAnalysis;
+  const paySegments = segmentation.paySegments;
+  const crossAnalysis = segmentation.crossAnalysis;
+
+  // 内容类型排名
   const typeRanking = Object.entries(typeComparison)
-    .map(([type, data]) => ({ type, score: data.avgSatisfaction * data.participationRate / 100 }))
+    .map(([type, data]) => ({ type, score: data.avgSatisfaction * data.participationRate / 100, satisfaction: data.avgSatisfaction, participation: data.participationRate }))
     .sort((a, b) => b.score - a.score);
+  const bestType = typeRanking[0] || {};
+  const worstType = typeRanking[typeRanking.length - 1] || {};
 
-  if (typeRanking.length > 0) {
-    const bestType = typeRanking[0];
-    const worstType = typeRanking[typeRanking.length - 1];
+  // 漏斗转化率
+  const touchToMulti = funnel.touchedNewContent > 0 ? Math.round(funnel.multiContentPlayers / funnel.touchedNewContent * 10000) / 100 : 0;
 
-    suggestions.push({
-      category: '内容类型规划',
-      priority: '高',
-      insight: `"${bestType.type}" 类内容综合表现最优（参与×满意度=${bestType.score.toFixed(1)}），`
-        + `"${worstType.type}" 类内容表现最弱（${worstType.score.toFixed(1)}）`,
-      suggestion: `下版本建议加大 "${bestType.type}" 类内容投入，对 "${worstType.type}" 类内容进行形态创新或暂缓投入`,
-      rationale: '延续高满意度内容类型的成功经验，减少低效内容的资源浪费',
+  // 低消耗道具类型
+  const lowConsumptionTypes = Object.entries(consumption).filter(([, d]) => d.consumptionRate < 50).map(([t]) => t);
+
+  // 大R流失数
+  let highValueChurnCount = 0;
+  if (crossAnalysis) {
+    for (const tier of ['大R', '超R']) {
+      if (crossAnalysis[tier] && crossAnalysis[tier]['流失风险']) highValueChurnCount += crossAnalysis[tier]['流失风险'].count;
+    }
+  }
+
+  // 未达标内容
+  const failedContents = planVsActual ? planVsActual.contentMetrics.filter(c => c.overallStatus === '多数未达标') : [];
+
+  // 上版本未解决问题
+  const unresolvedIssues = [];
+  if (planningContext && planningContext.previousVersionIssues) {
+    for (const issue of planningContext.previousVersionIssues) {
+      const result = checkIssueResolved(issue, contentAnalysis, segmentation, userHealth);
+      if (!result.resolved) unresolvedIssues.push({ issue, ...result });
+    }
+  }
+
+  // ================================================================
+  // 板块一：内容题材建议
+  // ================================================================
+  const contentThemePlan = {
+    section: '内容题材',
+    dataInsights: [],
+    suggestions: [],
+  };
+
+  // 题材方向洞察
+  if (bestType.type) {
+    contentThemePlan.dataInsights.push({
+      insight: `"${bestType.type}" 类内容综合表现最优（参与率${bestType.participation}% × 满意度${bestType.satisfaction}），玩家偏好明确`,
+      impact: '题材选择应延续该类型的核心体验',
+    });
+  }
+  if (worstType.type && worstType.type !== bestType.type) {
+    contentThemePlan.dataInsights.push({
+      insight: `"${worstType.type}" 类内容表现最弱，需要题材创新或融合`,
+      impact: '单独投入该类型 ROI 偏低',
+    });
+  }
+  if (touchToMulti < 50) {
+    contentThemePlan.dataInsights.push({
+      insight: `跨内容流动率仅${touchToMulti}%，内容间缺乏叙事串联`,
+      impact: '题材需建立更强的内容关联性',
     });
   }
 
-  // ---- 2. 基于漏斗断层推荐 ----
-  const funnel = contentAnalysis.contentFunnel;
-  const touchToMulti = funnel.touchedNewContent > 0
-    ? Math.round(funnel.multiContentPlayers / funnel.touchedNewContent * 10000) / 100
-    : 0;
-  const multiToDeep = funnel.multiContentPlayers > 0
-    ? Math.round(funnel.deepEngagedPlayers / funnel.multiContentPlayers * 10000) / 100
-    : 0;
+  // 题材建议
+  contentThemePlan.suggestions.push({
+    priority: '高',
+    title: '主题延续与扩展',
+    detail: `延续 "${bestType.type}" 类高满意度内容的核心体验，以此为下版本主题线索。`
+      + `对 "${worstType.type}" 类内容进行题材融合（如将弱势类型嵌入强势类型的叙事线中），而非单独立项`,
+    references: [
+      { source: '内容类型对比分析', metric: '综合得分', value: `${bestType.type}: 参与率${bestType.participation}%×满意度${bestType.satisfaction}` },
+      { source: '内容类型对比分析', metric: '最低表现类型', value: `${worstType.type}: 参与率${worstType.participation}%×满意度${worstType.satisfaction}` },
+    ],
+  });
 
   if (touchToMulti < 50) {
-    suggestions.push({
-      category: '内容串联设计',
+    contentThemePlan.suggestions.push({
       priority: '高',
-      insight: `接触新内容后仅${touchToMulti}%的玩家参与了多个内容，跨内容流动率偏低`,
-      suggestion: '下版本设计内容间的关联奖励链（如副本掉落→BOSS解锁→主线推进），形成内容消费闭环',
-      rationale: '提高单个玩家的内容消费广度，延长版本生命周期',
+      title: '内容叙事串联',
+      detail: '设计统一的版本故事线贯穿所有内容（副本→BOSS→主线→活动→外观），通过剧情解锁机制驱动跨内容体验',
+      references: [
+        { source: '内容漏斗分析', metric: '跨内容流动率', value: `${touchToMulti}%` },
+        { source: '内容漏斗分析', metric: '触达新内容人数', value: `${funnel.touchedNewContent}人 → 多内容参与${funnel.multiContentPlayers}人` },
+      ],
     });
   }
 
-  if (multiToDeep < 30) {
-    suggestions.push({
-      category: '深度参与机制',
-      priority: '中',
-      insight: `多内容参与玩家中仅${multiToDeep}%达到深度参与（完成率≥80%且次数≥5）`,
-      suggestion: '下版本增加渐进式成就系统和深度挑战奖励（如排行榜、赛季奖杯），激励重复高质量游玩',
-      rationale: '深度参与玩家的留存和付费贡献远高于浅层玩家',
-    });
-  }
-
-  // ---- 3. 基于留存缺口推荐 ----
-  const retImpact = contentAnalysis.contentRetentionImpact;
   if (retImpact.retentionLift.day28 > 3) {
-    const nonTouchRate = Math.round((1 - funnel.touchedNewContent / funnel.totalPlayers) * 10000) / 100;
-    suggestions.push({
-      category: '留存导向内容',
-      priority: '高',
-      insight: `参与新内容的玩家28日留存高出${retImpact.retentionLift.day28}pp，但仍有${nonTouchRate}%玩家未接触新内容`,
-      suggestion: '下版本设计低门槛引导内容（如新手专属副本简易模式、自动引导任务），确保更多玩家首日即接触核心内容',
-      rationale: '新内容对留存有显著正向作用，扩大触达面可直接提升整体留存',
+    contentThemePlan.suggestions.push({
+      priority: '中',
+      title: '低门槛引导内容',
+      detail: `新内容对28日留存有${retImpact.retentionLift.day28}pp增益，建议设计"版本序章"——轻量级单人引导内容，确保首日100%触达`,
+      references: [
+        { source: '内容留存影响分析', metric: 'Day28留存增益', value: `${retImpact.retentionLift.day28}pp` },
+        { source: '内容留存影响分析', metric: 'Day7留存增益', value: `${retImpact.retentionLift.day7}pp` },
+      ],
     });
   }
 
-  // ---- 4. 基于付费结构推荐 ----
-  const paySegments = segmentation.paySegments;
+  for (const fc of failedContents) {
+    const failedDims = fc.dimensions.filter(d => d.status === '未达标');
+    contentThemePlan.suggestions.push({
+      priority: '中',
+      title: `"${fc.name}" 类型迭代`,
+      detail: `该内容多数指标未达标（${failedDims.map(d => d.metric).join('、')}），下版本对此类型进行机制革新或题材重塑`,
+      references: failedDims.map(d => ({
+        source: '策划目标对比', metric: d.metric, value: `目标${d.target} → 实际${d.actual}（差距${d.gapPercent}%）`,
+      })),
+    });
+  }
+
+  // ================================================================
+  // 板块二：道具功能和定价建议
+  // ================================================================
+  const itemDesignPlan = {
+    section: '道具功能和定价',
+    dataInsights: [],
+    suggestions: [],
+  };
+
+  // 道具数据洞察
   const freePlayerPct = paySegments['免费'] ? paySegments['免费'].percentage : 0;
-  const revenue = itemConversion.revenueStructure;
+  itemDesignPlan.dataInsights.push({
+    insight: `收入结构：RMB ${revenue.rmbPercentage}% / 钻石 ${revenue.diamondPercentage}%`,
+    impact: revenue.rmbPercentage > 65 ? '过度依赖直购，存在付费疲劳风险' : revenue.diamondPercentage > 65 ? '钻石消费占比过高，易被赠送稀释' : '收入双通道相对均衡',
+  });
 
+  if (lowConsumptionTypes.length > 0) {
+    itemDesignPlan.dataInsights.push({
+      insight: `${lowConsumptionTypes.join('、')} 类道具消耗率低于50%，存在堆积`,
+      impact: '玩家购买意愿降低，经济循环受阻',
+    });
+  }
+
+  // 畅销/滞销分析
+  const salesOverview = itemConversion.itemSalesOverview;
+  const itemsByRevenue = Object.entries(salesOverview).sort((a, b) => b[1].totalRevenue - a[1].totalRevenue);
+  const topItems = itemsByRevenue.slice(0, 3).map(([, v]) => `${v.name}(${v.purchaseRate}%购买率)`);
+  const bottomItems = itemsByRevenue.slice(-2).map(([, v]) => `${v.name}(${v.purchaseRate}%购买率)`);
+
+  itemDesignPlan.dataInsights.push({
+    insight: `畅销道具：${topItems.join('、')}；滞销道具：${bottomItems.join('、')}`,
+    impact: '定价和功能设计需参考畅销品特征',
+  });
+
+  // 道具建议
   if (freePlayerPct > 50 && commercialization.keyMetrics.payingRate < 15) {
-    suggestions.push({
-      category: '付费转化内容',
+    itemDesignPlan.suggestions.push({
       priority: '高',
-      insight: `免费玩家占比${freePlayerPct}%，付费转化率仅${commercialization.keyMetrics.payingRate}%`,
-      suggestion: '下版本设计"体验式付费内容"：如限时免费试用高级皮肤3天、首充送限定宠物，降低首次付费心理门槛',
-      rationale: '通过"先体验后付费"机制将免费玩家转化为小R',
+      title: '首付转化商品设计',
+      detail: `免费玩家占${freePlayerPct}%，设计1-6元"超值首充礼包"（价值感10倍以上），搭配限时体验券（3天高级皮肤试用），降低首次付费门槛`,
+      references: [
+        { source: '用户分层分析', metric: '免费玩家占比', value: `${freePlayerPct}%` },
+        { source: '商业化评估', metric: '付费率', value: `${commercialization.keyMetrics.payingRate}%` },
+      ],
     });
   }
 
-  if (revenue.rmbPercentage > 70) {
-    suggestions.push({
-      category: '收入结构优化',
+  if (revenue.rmbPercentage > 65) {
+    itemDesignPlan.suggestions.push({
       priority: '中',
-      insight: `RMB直购收入占比${revenue.rmbPercentage}%，钻石生态偏弱`,
-      suggestion: '下版本增加高价值钻石消耗品（如限时强化石、稀有锻造材料），丰富虚拟货币消费场景',
-      rationale: '过度依赖直购容易造成付费疲劳，健康的双通道收入结构更可持续',
+      title: '增加钻石消耗品价值',
+      detail: '设计高价值钻石限定商品（限时强化石、稀有合成图纸），提升钻石消费场景丰富度，平衡收入通道',
+      references: [
+        { source: '收入结构分析', metric: 'RMB直购占比', value: `${revenue.rmbPercentage}%` },
+        { source: '收入结构分析', metric: '钻石消费占比', value: `${revenue.diamondPercentage}%` },
+      ],
     });
-  } else if (revenue.diamondPercentage > 70) {
-    suggestions.push({
-      category: '收入结构优化',
+  } else if (revenue.diamondPercentage > 65) {
+    itemDesignPlan.suggestions.push({
       priority: '中',
-      insight: `钻石消费占比${revenue.diamondPercentage}%，RMB直购偏弱`,
-      suggestion: '下版本推出更多高品质直购商品（如限定礼包、赛季通行证），提升直购吸引力',
-      rationale: '钻石消费容易被游戏内赠送稀释，适当增加直购比例能稳固收入基盘',
+      title: '增加直购商品吸引力',
+      detail: '推出差异化直购礼包（赛季限定、节日特惠），避免与钻石商品功能重叠，创造独占价值',
+      references: [
+        { source: '收入结构分析', metric: '钻石消费占比', value: `${revenue.diamondPercentage}%` },
+        { source: '收入结构分析', metric: 'RMB直购占比', value: `${revenue.rmbPercentage}%` },
+      ],
     });
   }
-
-  // ---- 5. 基于用户分层推荐 ----
-  const crossAnalysis = segmentation.crossAnalysis;
-  if (crossAnalysis) {
-    // 高价值用户流失预警
-    let highValueChurnCount = 0;
-    for (const tier of ['大R', '超R']) {
-      if (crossAnalysis[tier] && crossAnalysis[tier]['流失风险']) {
-        highValueChurnCount += crossAnalysis[tier]['流失风险'].count;
-      }
-    }
-    if (highValueChurnCount > 3) {
-      suggestions.push({
-        category: '大R专属内容',
-        priority: '高',
-        insight: `大R/超R中有${highValueChurnCount}人处于流失风险`,
-        suggestion: '下版本设计大R专属内容：排他性竞技玩法、限量收藏品、专属社交圈子（公会特权），增强归属感和沉没成本',
-        rationale: '大R流失的收入损失远超获取新大R的成本，需优先通过内容手段挽留',
-      });
-    }
-  }
-
-  // 活跃度结构问题
-  const churnRiskPct = userHealth.keyMetrics.churnRiskPercent;
-  if (churnRiskPct > 20) {
-    suggestions.push({
-      category: '回流内容设计',
-      priority: '高',
-      insight: `流失风险玩家占比${churnRiskPct}%`,
-      suggestion: '下版本增加"回归玩家专属福利"：7天回归奖励、快速追赶机制（经验/装备加速），配合版本更新推送召回',
-      rationale: '召回老玩家的成本远低于获取新玩家，配合新版本是最佳召回时机',
-    });
-  }
-
-  // ---- 6. 基于策划上下文的针对性建议 ----
-  if (planVsActual) {
-    // 未达标的内容逐一给出改进方向
-    for (const cm of planVsActual.contentMetrics) {
-      if (cm.overallStatus === '多数未达标') {
-        const failedDims = cm.dimensions.filter(d => d.status === '未达标');
-        const failedNames = failedDims.map(d => `${d.metric}(目标${d.target}${d.unit}→实际${d.actual}${d.unit})`).join('、');
-        suggestions.push({
-          category: '内容迭代',
-          priority: '高',
-          insight: `"${cm.name}" 多数目标未达标：${failedNames}`,
-          suggestion: `下版本对 "${cm.name}" 类型内容（${cm.type}）进行机制迭代：`
-            + (failedDims.some(d => d.metric === '完成率') ? '降低难度梯度、增加中间检查点；' : '')
-            + (failedDims.some(d => d.metric === '参与率') ? '优化入口引导、增加首次参与奖励；' : '')
-            + (failedDims.some(d => d.metric === '满意度') ? '丰富奖励层次、增加随机惊喜元素；' : '')
-            + (failedDims.some(d => d.metric === '人均参与次数') ? '增加每日/每周刷新内容保持新鲜感' : ''),
-          rationale: `策划目标 "${cm.designGoal}" 未能充分实现，需定向优化`,
-        });
-      }
-    }
-
-    // 上版本遗留问题跟踪
-    if (planningContext && planningContext.previousVersionIssues) {
-      for (const issue of planningContext.previousVersionIssues) {
-        const resolved = checkIssueResolved(issue, contentAnalysis, segmentation, userHealth);
-        if (!resolved.resolved) {
-          suggestions.push({
-            category: '历史问题延续',
-            priority: '中',
-            insight: `上版本问题 "${issue}" ${resolved.evidence}`,
-            suggestion: resolved.suggestion,
-            rationale: '跨版本未解决的问题会累积为系统性风险',
-          });
-        }
-      }
-    }
-  }
-
-  // ---- 7. 基于道具经济推荐 ----
-  const consumption = itemConversion.consumptionAnalysis;
-  const lowConsumptionTypes = Object.entries(consumption)
-    .filter(([, data]) => data.consumptionRate < 40)
-    .map(([type]) => type);
 
   if (lowConsumptionTypes.length >= 2) {
-    suggestions.push({
-      category: '经济系统设计',
+    itemDesignPlan.suggestions.push({
       priority: '中',
-      insight: `${lowConsumptionTypes.join('、')} 类道具消耗率均低于40%，道具堆积严重`,
-      suggestion: '下版本设计道具融合/合成系统（如碎片合成高级道具），增加消耗出口，同时创造新的追求目标',
-      rationale: '道具堆积降低玩家购买意愿，疏通消耗通道才能维持健康经济循环',
+      title: '道具合成/分解系统',
+      detail: `${lowConsumptionTypes.join('、')} 类道具堆积严重，设计"道具熔炼"系统：低级道具可合成高级道具，增加消耗出口并创造新追求`,
+      references: lowConsumptionTypes.map(t => ({
+        source: '道具消耗分析', metric: `${t}消耗率`, value: `${consumption[t].consumptionRate}%`,
+      })),
     });
   }
 
-  // 按优先级排序
-  const priorityOrder = { '高': 0, '中': 1, '低': 2 };
-  suggestions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  if (highValueChurnCount > 3) {
+    itemDesignPlan.suggestions.push({
+      priority: '高',
+      title: '大R专属限定商品',
+      detail: `大R/超R中有${highValueChurnCount}人处于流失风险，推出限量编号收藏品和专属功能性道具（如自定义特效、称号），增强稀缺性和沉没成本`,
+      references: [
+        { source: '用户交叉分析', metric: '大R/超R流失风险人数', value: `${highValueChurnCount}人` },
+        { source: '道具销售分析', metric: '畅销道具', value: topItems.join('、') },
+      ],
+    });
+  }
 
-  return suggestions;
+  // ================================================================
+  // 板块三：数值模型建议
+  // ================================================================
+  const numericalModelPlan = {
+    section: '数值模型',
+    dataInsights: [],
+    suggestions: [],
+  };
+
+  // KPI达成回顾
+  if (planVsActual) {
+    const achieved = planVsActual.overallMetrics.filter(m => m.status === '达标');
+    const missed = planVsActual.overallMetrics.filter(m => m.status === '未达标');
+
+    numericalModelPlan.dataInsights.push({
+      insight: `版本KPI达标率${planVsActual.overallAchievementRate}%：达标 ${achieved.map(m => m.metric).join('、') || '无'}`,
+      impact: missed.length > 0 ? `未达标：${missed.map(m => `${m.metric}(差距${m.gapPercent}%)`).join('、')}` : '全部达标',
+    });
+  }
+
+  // 数值建议
+  const nextTargets = {};
+  if (planVsActual) {
+    for (const m of planVsActual.overallMetrics) {
+      if (m.status === '达标') {
+        // 达标的指标上调5-10%
+        nextTargets[m.metric] = { target: Math.round(m.actual * 1.05 * 100) / 100, basis: `本版本实际${m.actual}${m.unit}，上调5%` };
+      } else {
+        // 未达标的保持或微调
+        nextTargets[m.metric] = { target: m.target, basis: `本版本未达标(实际${m.actual}${m.unit})，保持目标` };
+      }
+    }
+  }
+
+  numericalModelPlan.suggestions.push({
+    priority: '高',
+    title: '下版本KPI目标建议',
+    detail: '基于本版本达成情况动态调整',
+    targetMetrics: nextTargets,
+    references: planVsActual ? planVsActual.overallMetrics.map(m => ({
+      source: '策划目标对比', metric: m.metric, value: `目标${m.target}${m.unit} → 实际${m.actual}${m.unit}（${m.status}）`,
+    })) : [{ source: '数值模型', metric: '基准', value: '无策划目标输入，使用默认基准' }],
+  });
+
+  // 难度模型
+  const contentScores = contentQuality.contentScores;
+  const lowCompletionContents = Object.values(contentScores).filter(c => c.details.completionScore < 45);
+
+  if (lowCompletionContents.length > 0) {
+    numericalModelPlan.suggestions.push({
+      priority: '高',
+      title: '难度曲线优化',
+      detail: `${lowCompletionContents.map(c => `"${c.name}"(完成率评分${c.details.completionScore})`).join('、')} 完成率偏低，`
+        + '建议采用分层难度设计（普通/困难/噩梦），普通难度完成率目标≥70%，保证多数玩家有正反馈',
+      references: lowCompletionContents.map(c => ({
+        source: '内容质量评分', metric: `${c.name}完成率评分`, value: `${c.details.completionScore}/100`,
+      })),
+    });
+  }
+
+  // 经济数值
+  if (lowConsumptionTypes.length > 0) {
+    numericalModelPlan.suggestions.push({
+      priority: '中',
+      title: '经济平衡调整',
+      detail: `消耗品产出/消耗比失衡（${lowConsumptionTypes.join('、')}消耗率<50%），建议降低每日免费产出量20%或增加消耗场景，目标消耗率≥65%`,
+      references: lowConsumptionTypes.map(t => ({
+        source: '道具消耗分析', metric: `${t}消耗率`, value: `${consumption[t].consumptionRate}%`,
+      })),
+    });
+  }
+
+  // 内容各指标目标
+  const contentTargets = [];
+  if (planVsActual) {
+    for (const cm of planVsActual.contentMetrics) {
+      const adjusted = {};
+      for (const dim of cm.dimensions) {
+        if (dim.status === '达标') {
+          adjusted[dim.metric] = { target: Math.round(dim.actual * 1.05 * 100) / 100, note: '达标，上调5%' };
+        } else {
+          adjusted[dim.metric] = { target: dim.target, note: `未达标(实际${dim.actual})，保持` };
+        }
+      }
+      contentTargets.push({ name: cm.name, type: cm.type, metrics: adjusted });
+    }
+  }
+
+  if (contentTargets.length > 0) {
+    numericalModelPlan.suggestions.push({
+      priority: '中',
+      title: '各内容类型目标参考',
+      detail: '基于同类型内容本版本表现动态设定',
+      contentTargets,
+      references: contentTargets.map(ct => ({
+        source: '策划目标对比', metric: ct.name, value: Object.entries(ct.metrics).map(([k, v]) => `${k}: ${v.note}`).join('；'),
+      })),
+    });
+  }
+
+  // ================================================================
+  // 板块四：目标用户定位建议
+  // ================================================================
+  const targetUsersPlan = {
+    section: '目标用户定位',
+    dataInsights: [],
+    suggestions: [],
+  };
+
+  // 用户结构洞察
+  const tiers = ['免费', '小R', '中R', '大R', '超R'];
+  const tierPcts = tiers.map(t => `${t}${paySegments[t] ? paySegments[t].percentage : 0}%`).join(' / ');
+  targetUsersPlan.dataInsights.push({
+    insight: `付费层级分布：${tierPcts}`,
+    impact: `付费率${commercialization.keyMetrics.payingRate}%，ARPPU ${commercialization.keyMetrics.arppu}元`,
+  });
+
+  const churnRiskPct = userHealth.keyMetrics.churnRiskPercent;
+  targetUsersPlan.dataInsights.push({
+    insight: `活跃度结构：高活跃${userHealth.keyMetrics.highActivePercent}% / 流失风险${churnRiskPct}%`,
+    impact: churnRiskPct > 25 ? '流失风险占比过高，需重点运营' : '活跃结构相对健康',
+  });
+
+  // 各层级策略
+  const segmentStrategies = {};
+
+  // 免费玩家策略
+  if (freePlayerPct > 45) {
+    segmentStrategies['免费'] = {
+      goal: '转化为小R',
+      strategy: '设计超值首充(6元)、限时体验券、新手专属优惠，降低付费心理门槛',
+      kpi: `目标首充转化率≥${Math.max(8, Math.round(commercialization.keyMetrics.payingRate * 1.3))}%`,
+    };
+  }
+
+  // 小R策略
+  segmentStrategies['小R'] = {
+    goal: '提升消费频次和金额',
+    strategy: '月卡+战令双轨订阅体系，累计消费返利活动，培养持续付费习惯',
+    kpi: '目标月均消费≥50元',
+  };
+
+  // 中R策略
+  segmentStrategies['中R'] = {
+    goal: '推动单次大额消费',
+    strategy: '限时高价值礼包（128-328元档），阶梯消费奖励（满500送限定），内容驱动付费（BOSS必需品）',
+    kpi: `目标ARPPU≥${Math.max(200, Math.round(commercialization.keyMetrics.arppu * 1.15))}元`,
+  };
+
+  // 大R/超R策略
+  if (highValueChurnCount > 3) {
+    segmentStrategies['大R/超R'] = {
+      goal: '挽留+深度绑定',
+      strategy: `${highValueChurnCount}人处于流失风险，推出专属1v1客服关怀、限量编号收藏品、公会特权系统，增强沉没成本和社交绑定`,
+      kpi: '大R流失率降低至10%以内',
+    };
+  } else {
+    segmentStrategies['大R/超R'] = {
+      goal: '维持消费深度',
+      strategy: '限量高端商品、排他性玩法特权、赛季排行榜专属奖励',
+      kpi: '维持现有ARPPU水平',
+    };
+  }
+
+  targetUsersPlan.suggestions.push({
+    priority: '高',
+    title: '分层运营策略',
+    detail: '针对各付费层级的差异化策略',
+    segmentStrategies,
+    references: tiers.map(t => ({
+      source: '用户分层分析', metric: `${t}占比`, value: `${paySegments[t] ? paySegments[t].percentage : 0}%（${paySegments[t] ? paySegments[t].playerCount : 0}人）`,
+    })),
+  });
+
+  // 留存策略
+  const retentionActions = {};
+  const retentionRefs = [];
+  if (churnRiskPct > 20) {
+    retentionActions['流失风险用户'] = `占比${churnRiskPct}%，推送版本更新召回+7天回归专属奖励+快速追赶机制`;
+    retentionRefs.push({ source: '用户健康度评估', metric: '流失风险占比', value: `${churnRiskPct}%` });
+  }
+  retentionActions['新玩家'] = '版本序章自动引导进入核心内容，降低认知门槛';
+  retentionActions['活跃核心'] = '每周刷新排行榜+赛季挑战，保持竞争动力';
+  retentionRefs.push(
+    { source: '用户健康度评估', metric: '7日留存率', value: `${userHealth.keyMetrics.day7Retention}%` },
+    { source: '用户健康度评估', metric: '28日留存率', value: `${userHealth.keyMetrics.day28Retention}%` }
+  );
+
+  targetUsersPlan.suggestions.push({
+    priority: '高',
+    title: '留存运营策略',
+    detail: '按用户生命周期制定差异化留存手段',
+    retentionActions,
+    references: retentionRefs,
+  });
+
+  // 上版本问题跟踪
+  if (unresolvedIssues.length > 0) {
+    targetUsersPlan.suggestions.push({
+      priority: '中',
+      title: '历史遗留问题跟踪',
+      detail: '以下问题在本版本未完全解决，需在下版本持续关注',
+      unresolvedIssues: unresolvedIssues.map(u => ({
+        issue: u.issue,
+        currentStatus: u.evidence,
+        nextAction: u.suggestion,
+      })),
+      references: unresolvedIssues.map(u => ({
+        source: '历史问题追踪', metric: u.issue, value: u.evidence,
+      })),
+    });
+  }
+
+  return {
+    contentThemePlan,
+    itemDesignPlan,
+    numericalModelPlan,
+    targetUsersPlan,
+  };
 }
 
 function checkIssueResolved(issue, contentAnalysis, segmentation, userHealth) {

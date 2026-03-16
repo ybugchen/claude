@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const { generateGameData } = require('../data/gameData');
+const { generateGameData, generateHistoricalVersions } = require('../data/gameData');
 const { cleanGameData } = require('../game-analytics/dataCleaner');
 const { loadFromCSV } = require('../game-analytics/csvLoader');
 const { analyzeUserSegmentation } = require('../game-analytics/userSegmentation');
 const { analyzeContentExperience } = require('../game-analytics/contentAnalysis');
 const { analyzeItemConversion } = require('../game-analytics/itemConversion');
 const { generateAssessment } = require('../game-analytics/assessmentEngine');
+const { analyzeVersionHistory, extractCurrentVersionSummary } = require('../game-analytics/versionHistory');
 
 // 缓存分析结果（避免每次请求重新计算）
 let cachedResult = null;
@@ -19,8 +20,11 @@ function runFullAnalysis() {
   // 2. 数据清洗
   const { cleanedData, cleanReport } = cleanGameData(rawData);
 
-  // 3-6. 分析 + 评估
-  return buildReport(cleanedData, cleanReport);
+  // 3. 历史版本数据
+  const historicalVersions = generateHistoricalVersions();
+
+  // 4-7. 分析 + 评估 + 历史对比
+  return buildReport(cleanedData, cleanReport, historicalVersions);
 }
 
 /**
@@ -35,11 +39,22 @@ async function runCSVAnalysis(csvOptions) {
   return buildReport(cleanedData, cleanReport);
 }
 
-function buildReport(cleanedData, cleanReport) {
+function buildReport(cleanedData, cleanReport, historicalVersions) {
   const segmentation = analyzeUserSegmentation(cleanedData);
   const contentAnalysis = analyzeContentExperience(cleanedData);
   const itemConversion = analyzeItemConversion(cleanedData);
   const assessment = generateAssessment(segmentation, contentAnalysis, itemConversion, cleanReport, cleanedData.versionInfo);
+
+  // 历史版本效益汇总
+  let versionHistoryAnalysis = null;
+  if (historicalVersions && historicalVersions.length > 0) {
+    const currentSummary = extractCurrentVersionSummary(
+      cleanedData.versionInfo, segmentation, assessment.contentQuality,
+      assessment.commercialization, assessment.userHealth, assessment.overallScore,
+      itemConversion, contentAnalysis
+    );
+    versionHistoryAnalysis = analyzeVersionHistory(historicalVersions, currentSummary);
+  }
 
   return {
     versionInfo: cleanedData.versionInfo,
@@ -48,6 +63,7 @@ function buildReport(cleanedData, cleanReport) {
     contentAnalysis,
     itemConversion,
     assessment,
+    versionHistoryAnalysis,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -89,6 +105,12 @@ router.get('/items', (req, res) => {
 router.get('/assessment', (req, res) => {
   if (!cachedResult) cachedResult = runFullAnalysis();
   res.json(cachedResult.assessment);
+});
+
+// 获取历史版本效益汇总
+router.get('/version-history', (req, res) => {
+  if (!cachedResult) cachedResult = runFullAnalysis();
+  res.json(cachedResult.versionHistoryAnalysis);
 });
 
 // 刷新数据（重新生成）
