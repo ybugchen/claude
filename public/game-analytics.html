@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>游戏版本分析仪表盘</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
+    .header { background: linear-gradient(135deg, #1e293b, #334155); padding: 24px 32px; border-bottom: 1px solid #475569; }
+    .header h1 { font-size: 24px; color: #f1f5f9; }
+    .header p { color: #94a3b8; font-size: 14px; margin-top: 4px; }
+    .header-actions { display: flex; gap: 12px; margin-top: 12px; }
+    .header-actions button { padding: 8px 16px; border: 1px solid #475569; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .header-actions button:hover { background: #334155; }
+    .header-actions button.active { background: #3b82f6; border-color: #3b82f6; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .loading { text-align: center; padding: 80px; font-size: 18px; color: #94a3b8; }
+
+    /* Score cards */
+    .score-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .score-card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; text-align: center; }
+    .score-card .label { font-size: 13px; color: #94a3b8; margin-bottom: 8px; }
+    .score-card .score { font-size: 36px; font-weight: 700; }
+    .score-card .grade { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 14px; font-weight: 600; margin-top: 6px; }
+    .grade-S { background: #16a34a; color: white; }
+    .grade-A { background: #2563eb; color: white; }
+    .grade-B { background: #7c3aed; color: white; }
+    .grade-C { background: #d97706; color: white; }
+    .grade-D { background: #ea580c; color: white; }
+    .grade-F { background: #dc2626; color: white; }
+
+    /* Section */
+    .section { background: #1e293b; border-radius: 12px; padding: 24px; border: 1px solid #334155; margin-bottom: 20px; }
+    .section h2 { font-size: 18px; color: #f1f5f9; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #334155; }
+    .section h3 { font-size: 15px; color: #cbd5e1; margin: 16px 0 10px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; background: #334155; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #475569; }
+    td { padding: 10px 12px; border-bottom: 1px solid #1e293b; }
+    tr:hover td { background: rgba(59,130,246,0.05); }
+
+    /* Bar chart */
+    .bar-chart { display: flex; flex-direction: column; gap: 8px; }
+    .bar-row { display: flex; align-items: center; gap: 12px; }
+    .bar-label { width: 120px; font-size: 13px; color: #94a3b8; text-align: right; flex-shrink: 0; }
+    .bar-track { flex: 1; background: #334155; border-radius: 4px; height: 24px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; color: white; font-weight: 600; min-width: 32px; transition: width 0.5s; }
+    .bar-value { width: 60px; font-size: 13px; color: #cbd5e1; text-align: right; flex-shrink: 0; }
+
+    /* Funnel */
+    .funnel { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .funnel-step { display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: 600; padding: 12px; border-radius: 6px; text-align: center; }
+
+    /* Grid layouts */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    /* Recommendation cards */
+    .rec-card { background: #0f172a; border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid; }
+    .rec-card.high { border-left-color: #ef4444; }
+    .rec-card.medium { border-left-color: #f59e0b; }
+    .rec-card.low { border-left-color: #3b82f6; }
+    .rec-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .rec-category { font-size: 12px; color: #94a3b8; background: #334155; padding: 2px 8px; border-radius: 4px; }
+    .rec-priority { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+    .rec-priority.high { background: rgba(239,68,68,0.2); color: #fca5a5; }
+    .rec-priority.medium { background: rgba(245,158,11,0.2); color: #fcd34d; }
+    .rec-priority.low { background: rgba(59,130,246,0.2); color: #93c5fd; }
+    .rec-issue { font-size: 14px; color: #e2e8f0; margin-bottom: 6px; }
+    .rec-suggestion { font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+    .rec-impact { font-size: 12px; color: #22d3ee; }
+
+    /* Metric inline */
+    .metric { display: inline-block; margin-right: 24px; margin-bottom: 8px; }
+    .metric .val { font-size: 20px; font-weight: 700; color: #f1f5f9; }
+    .metric .lbl { font-size: 12px; color: #94a3b8; }
+
+    /* Tabs */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Data quality bar */
+    .data-summary { display: flex; gap: 24px; flex-wrap: wrap; }
+    .data-stat { text-align: center; }
+    .data-stat .num { font-size: 24px; font-weight: 700; }
+    .data-stat .desc { font-size: 12px; color: #94a3b8; }
+
+    /* Version history */
+    .trend-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .trend-up { background: rgba(22,163,74,0.2); color: #4ade80; }
+    .trend-down { background: rgba(239,68,68,0.2); color: #fca5a5; }
+    .trend-flat { background: rgba(148,163,184,0.2); color: #94a3b8; }
+    .verdict-card { text-align: center; padding: 32px; background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 12px; border: 2px solid #334155; margin-bottom: 24px; }
+    .verdict-card .verdict { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .verdict-card .summary { font-size: 14px; color: #94a3b8; line-height: 1.8; max-width: 700px; margin: 0 auto; }
+    .sparkline { display: flex; align-items: flex-end; gap: 2px; height: 32px; }
+    .sparkline .spark-bar { flex: 1; border-radius: 2px 2px 0 0; min-width: 12px; transition: height 0.3s; }
+    .diff-positive { color: #4ade80; }
+    .diff-negative { color: #fca5a5; }
+    .diff-zero { color: #94a3b8; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .metric-trend-card { background: #0f172a; border-radius: 8px; padding: 16px; border: 1px solid #334155; }
+    .metric-trend-card .mtc-label { font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+    .metric-trend-card .mtc-row { display: flex; justify-content: space-between; align-items: center; }
+    .metric-trend-card .mtc-value { font-size: 22px; font-weight: 700; color: #f1f5f9; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>游戏版本数据分析仪表盘</h1>
+    <p id="versionSubtitle">加载中...</p>
+    <div class="header-actions">
+      <button class="active" onclick="showTab('overview')">综合评估</button>
+      <button onclick="showTab('cleaning')">数据清洗</button>
+      <button onclick="showTab('segmentation')">用户分层</button>
+      <button onclick="showTab('content')">内容分析</button>
+      <button onclick="showTab('items')">道具转化</button>
+      <button onclick="showTab('recommendations')">优化建议</button>
+      <button onclick="showTab('versionHistory')">版本趋势</button>
+      <button onclick="showTab('kpiAchievement')">目标达成</button>
+      <button onclick="showTab('churn')">流失预警</button>
+      <button onclick="showTab('eventRoi')">活动效益</button>
+      <button onclick="showTab('cohort')">队列分析</button>
+      <button onclick="showTab('anomaly')">异常监测</button>
+      <button onclick="showTab('abTest')">A/B测试</button>
+      <button onclick="refreshData()">刷新数据</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="loading" class="loading">正在生成分析报告...</div>
+    <div id="dashboard" style="display:none;">
+
+      <!-- Overview Tab -->
+      <div id="tab-overview" class="tab-content active"></div>
+
+      <!-- Cleaning Tab -->
+      <div id="tab-cleaning" class="tab-content"></div>
+
+      <!-- Segmentation Tab -->
+      <div id="tab-segmentation" class="tab-content"></div>
+
+      <!-- Content Tab -->
+      <div id="tab-content" class="tab-content"></div>
+
+      <!-- Items Tab -->
+      <div id="tab-items" class="tab-content"></div>
+
+      <!-- Recommendations Tab -->
+      <div id="tab-recommendations" class="tab-content"></div>
+
+      <!-- Version History Tab -->
+      <div id="tab-versionHistory" class="tab-content"></div>
+
+      <!-- KPI Achievement Tab -->
+      <div id="tab-kpiAchievement" class="tab-content"></div>
+
+      <!-- Churn Prediction Tab -->
+      <div id="tab-churn" class="tab-content"></div>
+
+      <!-- Event ROI Tab -->
+      <div id="tab-eventRoi" class="tab-content"></div>
+
+      <!-- Cohort Analysis Tab -->
+      <div id="tab-cohort" class="tab-content"></div>
+
+      <!-- Anomaly Detection Tab -->
+      <div id="tab-anomaly" class="tab-content"></div>
+
+      <!-- A/B Test Tab -->
+      <div id="tab-abTest" class="tab-content"></div>
+    </div>
+  </div>
+
+  <script>
+    let reportData = null;
+
+    async function loadData() {
+      try {
+        const res = await fetch('/api/game-analytics/full-report');
+        reportData = await res.json();
+        renderDashboard();
+      } catch (err) {
+        document.getElementById('loading').textContent = '加载失败: ' + err.message;
+      }
+    }
+
+    async function refreshData() {
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('dashboard').style.display = 'none';
+      try {
+        await fetch('/api/game-analytics/refresh', { method: 'POST' });
+        const res = await fetch('/api/game-analytics/full-report');
+        reportData = await res.json();
+        renderDashboard();
+      } catch (err) {
+        document.getElementById('loading').textContent = '刷新失败: ' + err.message;
+      }
+    }
+
+    function showTab(name) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      document.querySelectorAll('.header-actions button').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    function e(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function renderDashboard() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+
+      const v = reportData.versionInfo;
+      document.getElementById('versionSubtitle').textContent =
+        `${v.versionName} (${v.versionId}) | ${v.releaseDate} ~ ${v.dataEndDate} | 生成时间: ${new Date(reportData.generatedAt).toLocaleString()}`;
+
+      renderOverview();
+      renderCleaning();
+      renderSegmentation();
+      renderContent();
+      renderItems();
+      renderRecommendations();
+      renderVersionHistory();
+      renderKpiAchievement();
+      renderChurn();
+      renderEventRoi();
+      renderCohort();
+      renderAnomaly();
+      renderAbTest();
+    }
+
+    function renderOverview() {
+      const a = reportData.assessment;
+      const os = a.overallScore;
+      const el = document.getElementById('tab-overview');
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">综合评分</div>
+            <div class="score" style="color:${scoreColor(os.score)}">${os.score}</div>
+            <div class="grade grade-${os.grade}">${os.grade}</div>
+          </div>
+          ${Object.entries(os.breakdown).map(([key, val]) => `
+            <div class="score-card">
+              <div class="label">${labelMap[key] || key} (${val.weight})</div>
+              <div class="score" style="color:${scoreColor(val.score)}">${val.score}</div>
+              <div class="grade grade-${val.grade}">${val.grade}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>关键商业指标</h2>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.payingRate}%</div><div class="lbl">付费率</div></div>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.arppu}</div><div class="lbl">ARPPU (元)</div></div>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.arpu}</div><div class="lbl">ARPU (元)</div></div>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.totalRevenue}</div><div class="lbl">版本总收入</div></div>
+            <div class="metric"><div class="val">${a.commercialization.keyMetrics.repeatPurchaseRate}%</div><div class="lbl">复购率</div></div>
+          </div>
+          <div class="section">
+            <h2>用户健康指标</h2>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.day7Retention}%</div><div class="lbl">7日留存</div></div>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.day28Retention}%</div><div class="lbl">28日留存</div></div>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.avgOnlineMinutes}分钟</div><div class="lbl">日均在线</div></div>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.highActivePercent}%</div><div class="lbl">高活跃占比</div></div>
+            <div class="metric"><div class="val">${a.userHealth.keyMetrics.churnRiskPercent}%</div><div class="lbl">流失风险占比</div></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>商业化评分明细</h2>
+          <div class="bar-chart">
+            ${Object.entries(a.commercialization.details).map(([k, v]) => `
+              <div class="bar-row">
+                <div class="bar-label">${detailLabel[k] || k}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${v}%;background:${scoreColor(v)}">${v}</div></div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCleaning() {
+      const c = reportData.cleanReport;
+      const dq = reportData.assessment.dataQuality;
+      const el = document.getElementById('tab-cleaning');
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">数据质量评分</div>
+            <div class="score" style="color:${scoreColor(dq.score)}">${dq.score}</div>
+            <div class="grade grade-${dq.grade}">${dq.grade}</div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>数据清洗概览</h2>
+          <div class="data-summary">
+            <div class="data-stat"><div class="num">${dq.totalOriginalRecords}</div><div class="desc">原始记录总数</div></div>
+            <div class="data-stat"><div class="num" style="color:#ef4444">${dq.removedRecords}</div><div class="desc">移除记录</div></div>
+            <div class="data-stat"><div class="num" style="color:#f59e0b">${dq.fixedRecords}</div><div class="desc">修复记录</div></div>
+            <div class="data-stat"><div class="num">${dq.errorRate}%</div><div class="desc">异常率</div></div>
+            <div class="data-stat"><div class="num">${dq.issueCount}</div><div class="desc">问题总数</div></div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>各数据集清洗详情</h2>
+          <table>
+            <tr><th>数据集</th><th>原始数量</th><th>清洗后</th><th>移除</th><th>修复</th></tr>
+            ${['players','loginRecords','contentExperience','itemTransactions'].map(k => `
+              <tr>
+                <td>${k}</td>
+                <td>${c.original[k]}</td>
+                <td>${c.cleaned[k]}</td>
+                <td style="color:#ef4444">${c.removedRecords[k]}</td>
+                <td style="color:#f59e0b">${c.fixedRecords[k] || 0}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+        <div class="section">
+          <h2>问题明细（前20条）</h2>
+          <table>
+            <tr><th>类型</th><th>数据集</th><th>原因</th></tr>
+            ${c.issues.slice(0, 20).map(issue => `
+              <tr>
+                <td><span style="color:${issue.type==='removed'?'#ef4444':'#f59e0b'}">${issue.type==='removed'?'移除':'修复'}</span></td>
+                <td>${e(issue.field)}</td>
+                <td>${e(issue.reason)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderSegmentation() {
+      const seg = reportData.segmentation;
+      const el = document.getElementById('tab-segmentation');
+
+      el.innerHTML = `
+        <div class="section">
+          <h2>概览指标</h2>
+          <div class="metric"><div class="val">${seg.summary.totalPlayers}</div><div class="lbl">总玩家</div></div>
+          <div class="metric"><div class="val">${seg.summary.payingRate}%</div><div class="lbl">付费率</div></div>
+          <div class="metric"><div class="val">${seg.summary.arppu}</div><div class="lbl">ARPPU</div></div>
+          <div class="metric"><div class="val">${seg.summary.arpu}</div><div class="lbl">ARPU</div></div>
+          <div class="metric"><div class="val">${seg.summary.day7Retention}%</div><div class="lbl">7日留存</div></div>
+          <div class="metric"><div class="val">${seg.summary.day28Retention}%</div><div class="lbl">28日留存</div></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>付费分层</h2>
+            <table>
+              <tr><th>层级</th><th>人数</th><th>占比</th><th>平均活跃天</th><th>版本付费</th><th>7日留存</th><th>28日留存</th></tr>
+              ${Object.entries(seg.paySegments).map(([tier, d]) => `
+                <tr>
+                  <td><strong>${e(tier)}</strong></td>
+                  <td>${d.playerCount}</td>
+                  <td>${d.percentage}%</td>
+                  <td>${d.avgActiveDays}</td>
+                  <td>${d.avgVersionPay}</td>
+                  <td>${d.retentionDay7}%</td>
+                  <td>${d.retentionDay28}%</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>活跃度分层</h2>
+            <div class="bar-chart">
+              ${Object.entries(seg.activitySegments).map(([level, d]) => `
+                <div class="bar-row">
+                  <div class="bar-label">${e(level)}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${d.percentage}%;background:${activityColor(level)}">${d.percentage}%</div></div>
+                  <div class="bar-value">${d.playerCount}人</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>生命周期分层</h2>
+          <table>
+            <tr><th>阶段</th><th>人数</th><th>占比</th><th>平均活跃天</th><th>版本付费</th><th>28日留存</th></tr>
+            ${Object.entries(seg.lifecycleSegments).map(([stage, d]) => `
+              <tr>
+                <td><strong>${e(stage)}</strong></td>
+                <td>${d.playerCount}</td>
+                <td>${d.percentage}%</td>
+                <td>${d.avgActiveDays}</td>
+                <td>${d.avgVersionPay}</td>
+                <td>${d.retentionDay28}%</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>付费 x 活跃度 交叉分析</h2>
+          <table>
+            <tr><th>付费\\活跃</th><th>高活跃</th><th>中活跃</th><th>低活跃</th><th>流失风险</th></tr>
+            ${Object.entries(seg.crossAnalysis).map(([pay, acts]) => `
+              <tr>
+                <td><strong>${e(pay)}</strong></td>
+                ${['高活跃','中活跃','低活跃','流失风险'].map(act => `
+                  <td>${acts[act]?.count || 0}人 (${acts[act]?.avgVersionPay || 0}元)</td>
+                `).join('')}
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderContent() {
+      const ca = reportData.contentAnalysis;
+      const cq = reportData.assessment.contentQuality;
+      const el = document.getElementById('tab-content');
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">内容质量评分</div>
+            <div class="score" style="color:${scoreColor(cq.avgScore)}">${cq.avgScore}</div>
+            <div class="grade grade-${cq.grade}">${cq.grade}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">最佳内容</div>
+            <div class="score" style="font-size:18px;margin-top:12px">${e(cq.topContent)}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">待优化内容</div>
+            <div class="score" style="font-size:18px;margin-top:12px">${e(cq.bottomContent)}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>内容参与漏斗</h2>
+          <div class="funnel">
+            ${[
+              { label: '全部玩家', val: ca.contentFunnel.totalPlayers, pct: '100%', color: '#475569' },
+              { label: '接触新内容', val: ca.contentFunnel.touchedNewContent, pct: ca.contentFunnel.touchedRate + '%', color: '#3b82f6' },
+              { label: '参与3+内容', val: ca.contentFunnel.multiContentPlayers, pct: ca.contentFunnel.multiContentRate + '%', color: '#7c3aed' },
+              { label: '全内容体验', val: ca.contentFunnel.allContentPlayers, pct: ca.contentFunnel.allContentRate + '%', color: '#d97706' },
+              { label: '深度参与', val: ca.contentFunnel.deepEngagedPlayers, pct: ca.contentFunnel.deepEngagedRate + '%', color: '#16a34a' },
+            ].map((step, i, arr) => `
+              <div class="funnel-step" style="width:${100 - i*15}%;background:${step.color}">
+                ${e(step.label)}: ${step.val}人 (${step.pct})
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>各内容评分明细</h2>
+          <table>
+            <tr><th>内容</th><th>类型</th><th>综合评分</th><th>参与度</th><th>完成度</th><th>满意度</th><th>粘性</th><th>等级</th></tr>
+            ${Object.entries(cq.contentScores).map(([id, s]) => `
+              <tr>
+                <td><strong>${e(s.name)}</strong></td>
+                <td>${e(s.type)}</td>
+                <td style="color:${scoreColor(s.score)};font-weight:700">${s.score}</td>
+                <td>${s.details.participationScore}</td>
+                <td>${s.details.completionScore}</td>
+                <td>${s.details.satisfactionScore}</td>
+                <td>${s.details.engagementScore}</td>
+                <td><span class="grade grade-${s.grade}">${s.grade}</span></td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>内容对留存的影响</h2>
+            <table>
+              <tr><th></th><th>7日留存</th><th>14日留存</th><th>28日留存</th></tr>
+              <tr>
+                <td>参与新内容</td>
+                <td>${ca.contentRetentionImpact.participatedRetention.day7}%</td>
+                <td>${ca.contentRetentionImpact.participatedRetention.day14}%</td>
+                <td>${ca.contentRetentionImpact.participatedRetention.day28}%</td>
+              </tr>
+              <tr>
+                <td>未参与</td>
+                <td>${ca.contentRetentionImpact.nonParticipatedRetention.day7}%</td>
+                <td>${ca.contentRetentionImpact.nonParticipatedRetention.day14}%</td>
+                <td>${ca.contentRetentionImpact.nonParticipatedRetention.day28}%</td>
+              </tr>
+              <tr style="color:#22d3ee;font-weight:600">
+                <td>留存提升</td>
+                <td>+${ca.contentRetentionImpact.retentionLift.day7}pp</td>
+                <td>+${ca.contentRetentionImpact.retentionLift.day14}pp</td>
+                <td>+${ca.contentRetentionImpact.retentionLift.day28}pp</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>内容类型对比</h2>
+            <table>
+              <tr><th>类型</th><th>参与率</th><th>平均次数</th><th>完成率</th><th>满意度</th></tr>
+              ${Object.entries(ca.typeComparison).map(([type, d]) => `
+                <tr>
+                  <td><strong>${e(type)}</strong></td>
+                  <td>${d.participationRate}%</td>
+                  <td>${d.avgTimes}</td>
+                  <td>${d.avgCompletion}%</td>
+                  <td>${d.avgSatisfaction}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>满意度排名</h2>
+          <div class="bar-chart">
+            ${ca.satisfactionRanking.map(item => `
+              <div class="bar-row">
+                <div class="bar-label">${e(item.name)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${item.avgSatisfaction/5*100}%;background:${scoreColor(item.avgSatisfaction/5*100)}">${item.avgSatisfaction}</div></div>
+                <div class="bar-value">${item.participantCount}人</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderItems() {
+      const ic = reportData.itemConversion;
+      const el = document.getElementById('tab-items');
+
+      el.innerHTML = `
+        <div class="section">
+          <h2>收入结构</h2>
+          <div class="metric"><div class="val">${ic.revenueStructure.totalRevenue}</div><div class="lbl">总收入</div></div>
+          <div class="metric"><div class="val">${ic.revenueStructure.rmbRevenue} (${ic.revenueStructure.rmbPercentage}%)</div><div class="lbl">RMB收入</div></div>
+          <div class="metric"><div class="val">${ic.revenueStructure.diamondRevenue} (${ic.revenueStructure.diamondPercentage}%)</div><div class="lbl">钻石收入</div></div>
+        </div>
+
+        <div class="section">
+          <h2>付费转化漏斗</h2>
+          <div class="funnel">
+            ${[
+              { label: '全部玩家', val: ic.paymentFunnel.totalPlayers, pct: '100%', color: '#475569' },
+              { label: '任意购买', val: ic.paymentFunnel.anyPurchase.count, pct: ic.paymentFunnel.anyPurchase.rate + '%', color: '#3b82f6' },
+              { label: '钻石购买', val: ic.paymentFunnel.diamondPurchase.count, pct: ic.paymentFunnel.diamondPurchase.rate + '%', color: '#7c3aed' },
+              { label: 'RMB购买', val: ic.paymentFunnel.rmbPurchase.count, pct: ic.paymentFunnel.rmbPurchase.rate + '%', color: '#d97706' },
+              { label: '高价值购买', val: ic.paymentFunnel.highValuePurchase.count, pct: ic.paymentFunnel.highValuePurchase.rate + '%', color: '#16a34a' },
+            ].map((step, i) => `
+              <div class="funnel-step" style="width:${100 - i*15}%;background:${step.color}">
+                ${e(step.label)}: ${step.val}人 (${step.pct})
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>道具销售明细</h2>
+          <table>
+            <tr><th>道具</th><th>类型</th><th>单价</th><th>购买人数</th><th>购买率</th><th>总销量</th><th>总收入</th><th>人均购买</th></tr>
+            ${Object.entries(ic.itemSalesOverview).sort((a,b) => b[1].totalRevenue - a[1].totalRevenue).map(([id, d]) => `
+              <tr>
+                <td><strong>${e(d.name)}</strong></td>
+                <td>${e(d.type)}</td>
+                <td>${d.unitPrice} ${e(d.currency)}</td>
+                <td>${d.buyerCount}</td>
+                <td>${d.purchaseRate}%</td>
+                <td>${d.totalQuantity}</td>
+                <td style="font-weight:600">${d.totalRevenue}</td>
+                <td>${d.avgQuantityPerBuyer}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>道具消耗率分析</h2>
+            <div class="bar-chart">
+              ${Object.entries(ic.consumptionAnalysis).map(([type, d]) => `
+                <div class="bar-row">
+                  <div class="bar-label">${e(type)}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${d.consumptionRate}%;background:${d.consumptionRate>60?'#16a34a':d.consumptionRate>40?'#d97706':'#ef4444'}">${d.consumptionRate}%</div></div>
+                  <div class="bar-value">余${d.surplus}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>商业关键指标</h2>
+            <div class="metric"><div class="val">${ic.commercialMetrics.payingRate}%</div><div class="lbl">付费率</div></div>
+            <div class="metric"><div class="val">${ic.commercialMetrics.arppu}</div><div class="lbl">ARPPU</div></div>
+            <div class="metric"><div class="val">${ic.commercialMetrics.arpu}</div><div class="lbl">ARPU</div></div>
+            <div class="metric"><div class="val">${ic.commercialMetrics.rmbSpenderCount}</div><div class="lbl">RMB付费人数</div></div>
+            <h3>热销道具TOP5</h3>
+            ${ic.commercialMetrics.topSellingItems.map((item, i) => `
+              <div style="display:flex;align-items:center;gap:8px;margin:6px 0">
+                <span style="color:#94a3b8">#${i+1}</span>
+                <strong>${e(item.name)}</strong>
+                <span style="color:#22d3ee">${item.revenue}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>各付费层级道具偏好</h2>
+          <table>
+            <tr><th>付费层级</th><th>总消费</th><th>交易次数</th><th>偏好道具类型</th></tr>
+            ${Object.entries(ic.tierPreferences).map(([tier, d]) => `
+              <tr>
+                <td><strong>${e(tier)}</strong></td>
+                <td>${d.totalSpending}</td>
+                <td>${d.transactionCount}</td>
+                <td>${d.topItemTypes.map(t => e(t.type) + '(' + t.amount + ')').join(', ')}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderRecommendations() {
+      const recs = reportData.assessment.recommendations;
+      const el = document.getElementById('tab-recommendations');
+
+      const priorityMap = { '高': 'high', '中': 'medium', '低': 'low' };
+      el.innerHTML = `
+        <div class="section">
+          <h2>优化建议 (${recs.length}条)</h2>
+          <p style="color:#94a3b8;margin-bottom:16px;font-size:13px">按优先级排序，红色为高优先级，橙色为中优先级，蓝色为低优先级</p>
+          ${recs.map(rec => `
+            <div class="rec-card ${priorityMap[rec.priority]}">
+              <div class="rec-header">
+                <span class="rec-category">${e(rec.category)}</span>
+                <span class="rec-priority ${priorityMap[rec.priority]}">优先级: ${e(rec.priority)}</span>
+              </div>
+              <div class="rec-issue">${e(rec.issue)}</div>
+              <div class="rec-suggestion">${e(rec.suggestion)}</div>
+              <div class="rec-impact">预期效果: ${e(rec.expectedImpact)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderVersionHistory() {
+      const vh = reportData.versionHistoryAnalysis;
+      const el = document.getElementById('tab-versionHistory');
+
+      if (!vh) {
+        el.innerHTML = '<div class="section"><h2>暂无历史版本数据</h2></div>';
+        return;
+      }
+
+      const ta = vh.trendAssessment;
+      const verdictColor = { '良好发展': '#16a34a', '显著进步': '#2563eb', '稳步提升': '#3b82f6', '需要警惕': '#d97706', '亟需改善': '#ef4444' };
+
+      el.innerHTML = `
+        <!-- 综合趋势判定 -->
+        <div class="verdict-card" style="border-color:${verdictColor[ta.overallVerdict] || '#334155'}">
+          <div class="verdict" style="color:${verdictColor[ta.overallVerdict] || '#f1f5f9'}">${e(ta.overallVerdict)}</div>
+          <div class="summary">${e(ta.summary)}</div>
+          <div style="display:flex;justify-content:center;gap:32px;margin-top:16px">
+            <div class="metric"><div class="val diff-positive">+${ta.scoreImprovement}</div><div class="lbl">评分提升</div></div>
+            <div class="metric"><div class="val">${ta.avgRevenueGrowth}%</div><div class="lbl">版本均收入增速</div></div>
+            <div class="metric"><div class="val diff-positive">${ta.positiveMetrics.length}</div><div class="lbl">上升指标</div></div>
+            <div class="metric"><div class="val diff-negative">${ta.negativeMetrics.length}</div><div class="lbl">下降指标</div></div>
+          </div>
+        </div>
+
+        <!-- 版本概览表 -->
+        <div class="section">
+          <h2>版本概览（${vh.totalVersions}个版本 | ${vh.timespan.from} ~ ${vh.timespan.to}）</h2>
+          <table>
+            <tr><th>版本</th><th>名称</th><th>玩家数</th><th>综合评分</th><th>等级</th><th>总收入</th><th>付费率</th><th>7日留存</th><th>28日留存</th><th>满意度</th></tr>
+            ${vh.versionOverview.map((v, i) => `
+              <tr style="${i === vh.versionOverview.length - 1 ? 'background:rgba(59,130,246,0.1);font-weight:600' : ''}">
+                <td>${e(v.versionId)}</td>
+                <td>${e(v.versionName)}</td>
+                <td>${v.totalPlayers}</td>
+                <td style="color:${scoreColor(v.overallScore)}">${v.overallScore}</td>
+                <td><span class="grade grade-${v.overallGrade}">${v.overallGrade}</span></td>
+                <td>${v.totalRevenue.toLocaleString()}</td>
+                <td>${v.payingRate}%</td>
+                <td>${v.day7Retention}%</td>
+                <td>${v.day28Retention}%</td>
+                <td>${v.avgSatisfaction}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <!-- 核心指标趋势卡片 -->
+        <div class="section">
+          <h2>核心指标趋势</h2>
+          <div class="metric-grid">
+            ${Object.entries(vh.metricTrends).map(([key, trend]) => {
+              const vals = trend.values.map(v => v.value);
+              const maxVal = Math.max(...vals);
+              const latest = vals[vals.length - 1];
+              const dirClass = trend.direction.includes('上升') ? 'trend-up' : trend.direction.includes('下降') ? 'trend-down' : 'trend-flat';
+              const growthClass = trend.totalGrowth > 0 ? 'diff-positive' : trend.totalGrowth < 0 ? 'diff-negative' : 'diff-zero';
+              return `
+                <div class="metric-trend-card">
+                  <div class="mtc-label">${e(trend.label)}</div>
+                  <div class="mtc-row">
+                    <div class="mtc-value">${typeof latest === 'number' && latest > 1000 ? latest.toLocaleString() : latest}${trend.unit === '%' ? '%' : ''}</div>
+                    <div>
+                      <span class="trend-badge ${dirClass}">${e(trend.direction)}</span>
+                      <span class="${growthClass}" style="font-size:13px;margin-left:6px">${trend.totalGrowth > 0 ? '+' : ''}${trend.totalGrowth}%</span>
+                    </div>
+                  </div>
+                  <div class="sparkline" style="margin-top:8px">
+                    ${vals.map((v, i) => `<div class="spark-bar" style="height:${maxVal > 0 ? Math.max(4, v / maxVal * 32) : 4}px;background:${i === vals.length - 1 ? '#3b82f6' : '#475569'}" title="${trend.values[i].versionId}: ${v}"></div>`).join('')}
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-top:4px">
+                    <span>${trend.values[0].versionId}</span>
+                    <span>${trend.values[trend.values.length - 1].versionId}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- 版本间环比对比 -->
+        <div class="section">
+          <h2>版本间环比变化</h2>
+          ${vh.versionComparisons.map(comp => `
+            <h3>${e(comp.from)} ${e(comp.fromName)} → ${e(comp.to)} ${e(comp.toName)}</h3>
+            <table>
+              <tr><th>指标</th><th>上版本</th><th>本版本</th><th>变化</th><th>增长率</th><th>状态</th></tr>
+              ${Object.entries(comp.changes).map(([key, c]) => {
+                const statusClass = c.status === '提升' ? 'diff-positive' : c.status === '下降' ? 'diff-negative' : 'diff-zero';
+                const trendBadge = c.status === '提升' ? 'trend-up' : c.status === '下降' ? 'trend-down' : 'trend-flat';
+                return `
+                  <tr>
+                    <td>${e(c.label)}</td>
+                    <td>${typeof c.previous === 'number' && c.previous > 1000 ? c.previous.toLocaleString() : c.previous}</td>
+                    <td>${typeof c.current === 'number' && c.current > 1000 ? c.current.toLocaleString() : c.current}</td>
+                    <td class="${statusClass}">${c.diff > 0 ? '+' : ''}${typeof c.diff === 'number' && Math.abs(c.diff) > 1000 ? c.diff.toLocaleString() : c.diff}</td>
+                    <td class="${statusClass}">${c.growthRate > 0 ? '+' : ''}${c.growthRate}%</td>
+                    <td><span class="trend-badge ${trendBadge}">${e(c.status)}</span></td>
+                  </tr>
+                `;
+              }).join('')}
+            </table>
+          `).join('')}
+        </div>
+
+        <!-- 最佳/最差表现 -->
+        <div class="section">
+          <h2>历史最佳 / 最差表现</h2>
+          <table>
+            <tr><th>指标</th><th>最佳版本</th><th>最佳值</th><th>最差版本</th><th>最差值</th></tr>
+            ${Object.entries(vh.highlights).map(([key, h]) => `
+              <tr>
+                <td>${e(h.label)}</td>
+                <td style="color:#4ade80">${e(h.best.versionId)} ${e(h.best.versionName)}</td>
+                <td style="color:#4ade80;font-weight:600">${typeof h.best.value === 'number' && h.best.value > 1000 ? h.best.value.toLocaleString() : h.best.value}</td>
+                <td style="color:#fca5a5">${e(h.worst.versionId)} ${e(h.worst.versionName)}</td>
+                <td style="color:#fca5a5;font-weight:600">${typeof h.worst.value === 'number' && h.worst.value > 1000 ? h.worst.value.toLocaleString() : h.worst.value}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <!-- 上升/下降指标归类 -->
+        <div class="grid-2">
+          <div class="section">
+            <h2 style="color:#4ade80">上升指标 (${ta.positiveMetrics.length})</h2>
+            ${ta.positiveMetrics.length > 0 ? ta.positiveMetrics.map(m => `
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155">
+                <span>${e(m.metric)}</span>
+                <span><span class="trend-badge trend-up">${e(m.direction)}</span> <span class="diff-positive">+${m.growth}%</span></span>
+              </div>
+            `).join('') : '<p style="color:#64748b">无</p>'}
+          </div>
+          <div class="section">
+            <h2 style="color:#fca5a5">下降/波动指标 (${ta.negativeMetrics.length + ta.stableMetrics.length})</h2>
+            ${ta.negativeMetrics.map(m => `
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155">
+                <span>${e(m.metric)}</span>
+                <span><span class="trend-badge trend-down">${e(m.direction)}</span> <span class="diff-negative">${m.growth}%</span></span>
+              </div>
+            `).join('')}
+            ${ta.stableMetrics.map(m => `
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155">
+                <span>${e(m.metric)}</span>
+                <span><span class="trend-badge trend-flat">${e(m.direction)}</span> <span class="diff-zero">${m.growth > 0 ? '+' : ''}${m.growth}%</span></span>
+              </div>
+            `).join('')}
+            ${ta.negativeMetrics.length + ta.stableMetrics.length === 0 ? '<p style="color:#64748b">无</p>' : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderKpiAchievement() {
+      const a = reportData.assessment;
+      const pva = a.planVsActual;
+      const el = document.getElementById('tab-kpiAchievement');
+
+      if (!pva) {
+        el.innerHTML = '<div class="section"><h2>暂无策划目标数据</h2><p style="color:#94a3b8">当前版本数据中无 planningContext，无法进行目标达成分析。</p></div>';
+        return;
+      }
+
+      const achievedCount = pva.overallMetrics.filter(m => m.status === '达标').length;
+      const nearCount = pva.overallMetrics.filter(m => m.status === '接近').length;
+      const missedCount = pva.overallMetrics.filter(m => m.status === '未达标').length;
+      const rate = pva.overallAchievementRate;
+      const grade = rate >= 90 ? 'S' : rate >= 75 ? 'A' : rate >= 60 ? 'B' : rate >= 40 ? 'C' : rate >= 20 ? 'D' : 'F';
+
+      const statusColor = (status) => status === '达标' ? '#16a34a' : status === '接近' ? '#d97706' : '#ef4444';
+      const statusIcon = (status) => status === '达标' ? '✓' : status === '接近' ? '△' : '✗';
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">总达标率</div>
+            <div class="score" style="color:${scoreColor(rate)}">${rate}%</div>
+            <div class="grade grade-${grade}">${grade}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">达标指标</div>
+            <div class="score" style="color:#16a34a">${achievedCount}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">接近达标</div>
+            <div class="score" style="color:#d97706">${nearCount}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">未达标</div>
+            <div class="score" style="color:#ef4444">${missedCount}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>整体KPI达成情况</h2>
+          <div style="display:flex;gap:4px;height:8px;border-radius:4px;overflow:hidden;margin-bottom:16px">
+            <div style="flex:${achievedCount};background:#16a34a"></div>
+            <div style="flex:${nearCount};background:#d97706"></div>
+            <div style="flex:${missedCount};background:#ef4444"></div>
+          </div>
+          <table>
+            <tr><th>指标</th><th>目标值</th><th>实际值</th><th>差距</th><th>差距%</th><th>达成进度</th><th>状态</th></tr>
+            ${pva.overallMetrics.map(m => {
+              const progress = m.target > 0 ? Math.min(120, Math.round(m.actual / m.target * 100)) : 0;
+              return `
+                <tr>
+                  <td><strong>${e(m.metric)}</strong></td>
+                  <td>${m.target}${e(m.unit)}</td>
+                  <td>${m.actual}${e(m.unit)}</td>
+                  <td style="color:${m.gap >= 0 ? '#4ade80' : '#fca5a5'}">${m.gap >= 0 ? '+' : ''}${m.gap}${e(m.unit)}</td>
+                  <td style="color:${m.gapPercent >= 0 ? '#4ade80' : '#fca5a5'}">${m.gapPercent >= 0 ? '+' : ''}${m.gapPercent}%</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="flex:1;background:#334155;border-radius:4px;height:16px;overflow:hidden">
+                        <div style="width:${Math.min(100, progress)}%;height:100%;background:${statusColor(m.status)};border-radius:4px"></div>
+                      </div>
+                      <span style="font-size:12px;color:#94a3b8;width:36px">${progress}%</span>
+                    </div>
+                  </td>
+                  <td><span style="color:${statusColor(m.status)};font-weight:600">${statusIcon(m.status)} ${e(m.status)}</span></td>
+                </tr>
+              `;
+            }).join('')}
+          </table>
+        </div>
+
+        ${pva.contentMetrics.length > 0 ? `
+        <div class="section">
+          <h2>各内容达成情况</h2>
+          <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <span style="padding:4px 12px;border-radius:4px;font-size:13px;background:rgba(22,163,74,0.2);color:#4ade80">
+              全部达标: ${pva.contentMetrics.filter(c => c.overallStatus === '全部达标').length}
+            </span>
+            <span style="padding:4px 12px;border-radius:4px;font-size:13px;background:rgba(217,119,6,0.2);color:#fcd34d">
+              部分达标: ${pva.contentMetrics.filter(c => c.overallStatus === '部分达标').length}
+            </span>
+            <span style="padding:4px 12px;border-radius:4px;font-size:13px;background:rgba(239,68,68,0.2);color:#fca5a5">
+              多数未达标: ${pva.contentMetrics.filter(c => c.overallStatus === '多数未达标').length}
+            </span>
+          </div>
+
+          <div class="bar-chart" style="margin-bottom:20px">
+            ${pva.contentMetrics.sort((a,b) => b.achievementRate - a.achievementRate).map(cm => `
+              <div class="bar-row">
+                <div class="bar-label">${e(cm.name)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${cm.achievementRate}%;background:${cm.overallStatus === '全部达标' ? '#16a34a' : cm.overallStatus === '部分达标' ? '#d97706' : '#ef4444'}">${cm.achievementRate}%</div></div>
+                <div class="bar-value" style="width:80px">${e(cm.overallStatus)}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="grid-2">
+            ${pva.contentMetrics.map(cm => `
+              <div class="section" style="margin-bottom:0">
+                <h3>${e(cm.name)} <span style="font-size:12px;color:#94a3b8">${e(cm.type)}</span>
+                  <span style="float:right;color:${cm.overallStatus === '全部达标' ? '#16a34a' : cm.overallStatus === '部分达标' ? '#d97706' : '#ef4444'};font-size:13px">${e(cm.overallStatus)} (${cm.achievementRate}%)</span>
+                </h3>
+                ${cm.designGoal ? `<p style="font-size:12px;color:#64748b;margin-bottom:8px">设计目标: ${e(cm.designGoal)}</p>` : ''}
+                <table>
+                  <tr><th>维度</th><th>目标</th><th>实际</th><th>差距</th><th>状态</th></tr>
+                  ${cm.dimensions.map(d => `
+                    <tr>
+                      <td>${e(d.metric)}</td>
+                      <td>${d.target}${e(d.unit)}</td>
+                      <td>${d.actual}${e(d.unit)}</td>
+                      <td style="color:${d.gap >= 0 ? '#4ade80' : '#fca5a5'}">${d.gap >= 0 ? '+' : ''}${d.gap}${e(d.unit)} (${d.gapPercent >= 0 ? '+' : ''}${d.gapPercent}%)</td>
+                      <td><span style="color:${statusColor(d.status)};font-weight:600">${statusIcon(d.status)} ${e(d.status)}</span></td>
+                    </tr>
+                  `).join('')}
+                </table>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        ` : ''}
+
+        ${pva.goalReview && pva.goalReview.length > 0 ? `
+        <div class="section">
+          <h2>版本目标复盘</h2>
+          ${pva.goalReview.map(gr => {
+            const icon = gr.assessment.status === '达成' ? '✓' : gr.assessment.status === '未完全达成' ? '△' : gr.assessment.status === '未达成' ? '✗' : '?';
+            const color = gr.assessment.status === '达成' ? '#16a34a' : gr.assessment.status === '未完全达成' ? '#d97706' : gr.assessment.status === '未达成' ? '#ef4444' : '#94a3b8';
+            return `
+              <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #334155;align-items:flex-start">
+                <span style="font-size:20px;color:${color};flex-shrink:0">${icon}</span>
+                <div>
+                  <div style="font-size:14px;color:#e2e8f0;margin-bottom:4px">${e(gr.goal)}</div>
+                  <div style="font-size:13px;color:${color};font-weight:600;margin-bottom:2px">${e(gr.assessment.status)}</div>
+                  <div style="font-size:12px;color:#94a3b8">${e(gr.assessment.evidence)}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        ` : ''}
+      `;
+    }
+
+    function renderChurn() {
+      const el = document.getElementById('tab-churn');
+      const churn = reportData.churnAnalysis;
+      if (!churn) {
+        el.innerHTML = '<div class="section"><h2>流失预警分析</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      const riskColors = { '高危': '#ef4444', '中危': '#d97706', '低危': '#3b82f6', '安全': '#16a34a' };
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">总玩家数</div>
+            <div class="score">${churn.summary.totalPlayers}</div>
+          </div>
+          ${Object.entries(churn.summary.riskDistribution).map(([level, data]) => `
+            <div class="score-card">
+              <div class="label">${e(level)}</div>
+              <div class="score" style="color:${riskColors[level]}">${data.count}</div>
+              <div style="font-size:13px;color:#94a3b8">${data.percentage}%</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="section">
+          <h2>风险分布</h2>
+          <div class="bar-chart">
+            ${Object.entries(churn.summary.riskDistribution).map(([level, data]) => `
+              <div class="bar-row">
+                <div class="bar-label">${e(level)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${data.percentage}%;background:${riskColors[level]}">${data.percentage}%</div></div>
+                <div class="bar-value">${data.count}人</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>流失信号统计</h2>
+            <div class="bar-chart">
+              ${churn.signalStats.map(s => `
+                <div class="bar-row">
+                  <div class="bar-label">${e(s.signal)}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${s.percentage}%;background:#d97706">${s.count}</div></div>
+                  <div class="bar-value">${s.percentage}%</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>付费层级 x 流失风险</h2>
+            <table>
+              <tr><th>付费层级</th><th>高危</th><th>中危</th><th>低危</th><th>安全</th></tr>
+              ${Object.entries(churn.payTierRisk).map(([tier, risks]) => `
+                <tr>
+                  <td><strong>${e(tier)}</strong></td>
+                  <td style="color:#ef4444">${risks['高危'] || 0}</td>
+                  <td style="color:#d97706">${risks['中危'] || 0}</td>
+                  <td style="color:#3b82f6">${risks['低危'] || 0}</td>
+                  <td style="color:#16a34a">${risks['安全'] || 0}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>高危玩家列表 (前20)</h2>
+          <table>
+            <tr><th>玩家ID</th><th>等级</th><th>付费层级</th><th>风险分</th><th>活跃天数</th><th>在线时长</th><th>风险信号</th><th>建议操作</th></tr>
+            ${churn.highRiskPlayers.slice(0, 20).map(p => `
+              <tr>
+                <td>${e(p.playerId)}</td>
+                <td>${e(p.level)}</td>
+                <td>${e(p.payTier)}</td>
+                <td style="color:#ef4444;font-weight:700">${p.riskScore}</td>
+                <td>${p.activeDays}</td>
+                <td>${p.avgOnlineMinutes}分钟</td>
+                <td style="font-size:12px">${p.signals.map(s => e(s)).join(', ')}</td>
+                <td style="font-size:12px;color:#22d3ee">${e(p.action)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderEventRoi() {
+      const el = document.getElementById('tab-eventRoi');
+      const events = reportData.eventRoiAnalysis;
+      if (!events) {
+        el.innerHTML = '<div class="section"><h2>活动效益分析</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">活动总数</div>
+            <div class="score">${events.summary.totalEvents}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">平均ROI</div>
+            <div class="score" style="color:${events.summary.avgRoi > 0 ? '#16a34a' : '#ef4444'}">${events.summary.avgRoi}%</div>
+          </div>
+          <div class="score-card">
+            <div class="label">增量总收入</div>
+            <div class="score">${events.summary.totalIncrementalRevenue.toLocaleString()}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">平均参与率</div>
+            <div class="score">${events.summary.avgParticipationRate}%</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>活动ROI排行</h2>
+          <div class="bar-chart">
+            ${events.events.sort((a,b) => b.roi - a.roi).map(ev => `
+              <div class="bar-row">
+                <div class="bar-label">${e(ev.name)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, Math.max(5, ev.roi / 2))}%;background:${ev.roi > 50 ? '#16a34a' : ev.roi > 0 ? '#3b82f6' : '#ef4444'}">${ev.roi}%</div></div>
+                <div class="bar-value">${e(ev.type)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>活动详细分析</h2>
+          <table>
+            <tr><th>活动名称</th><th>类型</th><th>参与率</th><th>完成率</th><th>基线收入</th><th>增量收入</th><th>成本</th><th>ROI</th><th>留存提升</th></tr>
+            ${events.events.map(ev => `
+              <tr>
+                <td><strong>${e(ev.name)}</strong></td>
+                <td>${e(ev.type)}</td>
+                <td>${ev.participationRate}%</td>
+                <td>${ev.completionRate}%</td>
+                <td>${ev.baselineRevenue.toLocaleString()}</td>
+                <td style="color:${ev.incrementalRevenue > 0 ? '#4ade80' : '#fca5a5'}">${ev.incrementalRevenue > 0 ? '+' : ''}${ev.incrementalRevenue.toLocaleString()}</td>
+                <td>${ev.cost.toLocaleString()}</td>
+                <td style="color:${ev.roi > 0 ? '#4ade80' : '#fca5a5'};font-weight:700">${ev.roi}%</td>
+                <td style="color:#22d3ee">Day7 +${ev.retentionLift.day7}pp</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>活动类型对比</h2>
+          <table>
+            <tr><th>类型</th><th>活动数</th><th>平均参与率</th><th>平均ROI</th><th>总增量收入</th></tr>
+            ${Object.entries(events.typeComparison).map(([type, d]) => `
+              <tr>
+                <td><strong>${e(type)}</strong></td>
+                <td>${d.count}</td>
+                <td>${d.avgParticipation}%</td>
+                <td style="color:${d.avgRoi > 0 ? '#4ade80' : '#fca5a5'}">${d.avgRoi}%</td>
+                <td>${d.totalRevenue.toLocaleString()}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderCohort() {
+      const el = document.getElementById('tab-cohort');
+      const cohort = reportData.cohortAnalysis;
+      if (!cohort) {
+        el.innerHTML = '<div class="section"><h2>队列分析</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      const retentionColor = (val) => val >= 50 ? '#16a34a' : val >= 30 ? '#2563eb' : val >= 15 ? '#d97706' : '#ef4444';
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">队列总数</div>
+            <div class="score">${cohort.cohorts.length}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">最佳队列</div>
+            <div class="score" style="font-size:16px;margin-top:8px">${e(cohort.bestCohort.key)}</div>
+            <div style="font-size:12px;color:#94a3b8">D7留存 ${cohort.bestCohort.day7Retention}%</div>
+          </div>
+          <div class="score-card">
+            <div class="label">平均Day7留存</div>
+            <div class="score" style="color:${retentionColor(cohort.summary.avgDay7Retention)}">${cohort.summary.avgDay7Retention}%</div>
+          </div>
+          <div class="score-card">
+            <div class="label">平均LTV(30天)</div>
+            <div class="score">${cohort.summary.avgLtv30}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>留存矩阵</h2>
+          <table>
+            <tr><th>队列</th><th>人数</th><th>Day1</th><th>Day3</th><th>Day7</th><th>Day14</th><th>Day28</th></tr>
+            ${cohort.cohorts.map(c => `
+              <tr>
+                <td><strong>${e(c.key)}</strong></td>
+                <td>${c.size}</td>
+                ${['day1','day3','day7','day14','day28'].map(d => `
+                  <td style="background:${retentionColor(c.retention[d])}22;color:${retentionColor(c.retention[d])};font-weight:600;text-align:center">${c.retention[d]}%</td>
+                `).join('')}
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>队列LTV对比</h2>
+            <table>
+              <tr><th>队列</th><th>7天LTV</th><th>14天LTV</th><th>30天LTV</th></tr>
+              ${cohort.cohorts.map(c => `
+                <tr>
+                  <td><strong>${e(c.key)}</strong></td>
+                  <td>${c.ltv.day7}元</td>
+                  <td>${c.ltv.day14}元</td>
+                  <td style="font-weight:600">${c.ltv.day30}元</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>队列付费转化</h2>
+            <div class="bar-chart">
+              ${cohort.cohorts.map(c => `
+                <div class="bar-row">
+                  <div class="bar-label">${e(c.key)}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, c.payConversion * 5)}%;background:#3b82f6">${c.payConversion}%</div></div>
+                  <div class="bar-value">${c.size}人</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAnomaly() {
+      const el = document.getElementById('tab-anomaly');
+      const anomaly = reportData.anomalyDetection;
+      if (!anomaly) {
+        el.innerHTML = '<div class="section"><h2>异常监测</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      const sevColor = { 'critical': '#ef4444', 'warning': '#d97706', 'info': '#3b82f6' };
+      const sevLabel = { 'critical': '严重', 'warning': '警告', 'info': '提示' };
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">异常总数</div>
+            <div class="score">${anomaly.summary.total}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">严重</div>
+            <div class="score" style="color:#ef4444">${anomaly.summary.critical}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">警告</div>
+            <div class="score" style="color:#d97706">${anomaly.summary.warning}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">提示</div>
+            <div class="score" style="color:#3b82f6">${anomaly.summary.info}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>异常事件列表</h2>
+          ${anomaly.anomalies.map(a => `
+            <div class="rec-card" style="border-left-color:${sevColor[a.severity]}">
+              <div class="rec-header">
+                <span class="rec-category">${e(a.category)}</span>
+                <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:${sevColor[a.severity]}33;color:${sevColor[a.severity]}">${sevLabel[a.severity]}</span>
+              </div>
+              <div class="rec-issue">${e(a.description)}</div>
+              <div style="display:flex;gap:16px;font-size:13px;color:#94a3b8;margin-top:8px">
+                <span>当前值: <strong style="color:#e2e8f0">${a.currentValue}</strong></span>
+                <span>预期范围: ${a.expectedRange[0]} ~ ${a.expectedRange[1]}</span>
+                <span>偏离: <strong style="color:${sevColor[a.severity]}">${a.deviation}σ</strong></span>
+              </div>
+              <div style="font-size:12px;color:#94a3b8;margin-top:6px">可能原因: ${e(a.possibleCause)}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        ${anomaly.playerAnomalies && anomaly.playerAnomalies.length > 0 ? `
+        <div class="section">
+          <h2>异常玩家 (${anomaly.playerAnomalies.length})</h2>
+          <table>
+            <tr><th>玩家ID</th><th>异常类型</th><th>异常值</th><th>偏离度</th><th>严重等级</th></tr>
+            ${anomaly.playerAnomalies.slice(0, 20).map(p => `
+              <tr>
+                <td>${e(p.playerId)}</td>
+                <td>${e(p.type)}</td>
+                <td style="font-weight:600">${p.value}</td>
+                <td style="color:${sevColor[p.severity]}">${p.deviation}σ</td>
+                <td><span style="color:${sevColor[p.severity]}">${sevLabel[p.severity]}</span></td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+        ` : ''}
+
+        <div class="section">
+          <h2>异常类型分布</h2>
+          <div class="bar-chart">
+            ${Object.entries(anomaly.typeDistribution).map(([type, count]) => `
+              <div class="bar-row">
+                <div class="bar-label">${e(type)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, count / anomaly.summary.total * 100)}%;background:#d97706">${count}</div></div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAbTest() {
+      const el = document.getElementById('tab-abTest');
+      const ab = reportData.abTestAnalysis;
+      if (!ab) {
+        el.innerHTML = '<div class="section"><h2>A/B测试分析</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">测试总数</div>
+            <div class="score">${ab.tests.length}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">显著结果</div>
+            <div class="score" style="color:#16a34a">${ab.tests.filter(t => t.results.significant).length}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">进行中</div>
+            <div class="score" style="color:#3b82f6">${ab.tests.filter(t => t.status === 'running').length}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">已完成</div>
+            <div class="score">${ab.tests.filter(t => t.status === 'completed').length}</div>
+          </div>
+        </div>
+
+        ${ab.tests.map(test => `
+        <div class="section">
+          <h2>${e(test.name)} <span style="font-size:13px;padding:2px 8px;border-radius:4px;background:${test.status === 'completed' ? '#16a34a' : '#3b82f6'}33;color:${test.status === 'completed' ? '#16a34a' : '#3b82f6'}">${test.status === 'completed' ? '已完成' : '进行中'}</span></h2>
+          <p style="color:#94a3b8;font-size:13px;margin-bottom:16px">假设: ${e(test.hypothesis)}</p>
+
+          <table>
+            <tr><th>分组</th><th>样本量</th>${Object.keys(test.groups[0].metrics).map(k => `<th>${e(k)}</th>`).join('')}</tr>
+            ${test.groups.map(g => `
+              <tr>
+                <td><strong>${e(g.name)}</strong></td>
+                <td>${g.size}</td>
+                ${Object.values(g.metrics).map(v => `<td>${v}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </table>
+
+          <div style="margin-top:16px;padding:16px;background:#0f172a;border-radius:8px;border:1px solid ${test.results.significant ? '#16a34a' : '#475569'}">
+            <div style="display:flex;gap:24px;flex-wrap:wrap">
+              <div class="metric"><div class="val" style="color:${test.results.significant ? '#4ade80' : '#94a3b8'}">${test.results.lift}</div><div class="lbl">效果量</div></div>
+              <div class="metric"><div class="val">${test.results.pValue}</div><div class="lbl">p-value</div></div>
+              <div class="metric"><div class="val" style="color:${test.results.significant ? '#4ade80' : '#fca5a5'}">${test.results.significant ? '显著' : '不显著'}</div><div class="lbl">统计显著性</div></div>
+              <div class="metric"><div class="val">${test.results.confidence}%</div><div class="lbl">置信度</div></div>
+            </div>
+            <div style="margin-top:12px;font-size:14px;color:#22d3ee">${e(test.results.recommendation)}</div>
+          </div>
+        </div>
+        `).join('')}
+      `;
+    }
+
+    // Helpers
+    const labelMap = { contentQuality: '内容质量', commercialization: '商业化', userHealth: '用户健康', dataQuality: '数据质量' };
+    const detailLabel = { payRateScore: '付费率', arppuScore: 'ARPPU', repeatScore: '复购率', diversityScore: '收入多样性' };
+
+    function scoreColor(score) {
+      if (score >= 80) return '#16a34a';
+      if (score >= 60) return '#2563eb';
+      if (score >= 40) return '#d97706';
+      return '#ef4444';
+    }
+
+    function activityColor(level) {
+      const colors = { '高活跃': '#16a34a', '中活跃': '#3b82f6', '低活跃': '#d97706', '流失风险': '#ef4444' };
+      return colors[level] || '#475569';
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
