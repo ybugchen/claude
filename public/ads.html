@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>广告管理 - 跨平台广告分析</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="ads-styles.css">
+</head>
+<body>
+  <div class="container wide">
+    <header>
+      <h1>跨平台广告分析</h1>
+      <p class="subtitle">多平台广告数据管理与自动化分析</p>
+      <nav class="nav-bar">
+        <a href="index.html">任务列表</a>
+        <a href="ads.html" class="active">广告管理</a>
+        <a href="dashboard.html">数据仪表盘</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="ad-form" id="adForm">
+        <h3 id="formTitle">添加广告</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>平台</label>
+            <select id="platformSelect">
+              <option value="google">Google 广告</option>
+              <option value="meta">Meta 广告</option>
+              <option value="tiktok">TikTok 广告</option>
+              <option value="twitter">Twitter 广告</option>
+              <option value="linkedin">LinkedIn 广告</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>状态</label>
+            <select id="statusSelect">
+              <option value="active">投放中</option>
+              <option value="paused">已暂停</option>
+              <option value="completed">已完成</option>
+            </select>
+          </div>
+          <div class="form-group full-width">
+            <label>活动名称</label>
+            <input type="text" id="campaignInput" placeholder="输入广告活动名称">
+          </div>
+          <div class="form-group">
+            <label>广告组名称</label>
+            <input type="text" id="adSetInput" placeholder="输入广告组名称">
+          </div>
+          <div class="form-group">
+            <label>广告名称</label>
+            <input type="text" id="adNameInput" placeholder="输入广告名称">
+          </div>
+          <div class="form-group">
+            <label>展示量</label>
+            <input type="number" id="impressionsInput" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>点击量</label>
+            <input type="number" id="clicksInput" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>转化量</label>
+            <input type="number" id="conversionsInput" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>花费 (元)</label>
+            <input type="number" id="spendInput" min="0" step="0.01" value="0">
+          </div>
+          <div class="form-group">
+            <label>收入 (元)</label>
+            <input type="number" id="revenueInput" min="0" step="0.01" value="0">
+          </div>
+          <div class="form-group">
+            <label>开始日期</label>
+            <input type="date" id="startDateInput">
+          </div>
+          <div class="form-group">
+            <label>结束日期</label>
+            <input type="date" id="endDateInput">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="submitBtn" onclick="handleSubmit()">添加广告</button>
+          <button class="btn btn-secondary hidden" id="cancelBtn" onclick="handleCancel()">取消编辑</button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <select id="filterPlatform" onchange="fetchAds()">
+          <option value="">全部平台</option>
+          <option value="google">Google 广告</option>
+          <option value="meta">Meta 广告</option>
+          <option value="tiktok">TikTok 广告</option>
+          <option value="twitter">Twitter 广告</option>
+          <option value="linkedin">LinkedIn 广告</option>
+        </select>
+        <select id="filterStatus" onchange="fetchAds()">
+          <option value="">全部状态</option>
+          <option value="active">投放中</option>
+          <option value="paused">已暂停</option>
+          <option value="completed">已完成</option>
+        </select>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="ad-table" id="adTable">
+          <thead>
+            <tr>
+              <th>平台</th>
+              <th>活动名称</th>
+              <th>花费</th>
+              <th>收入</th>
+              <th>CTR</th>
+              <th>ROAS</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="adTableBody"></tbody>
+        </table>
+      </div>
+
+      <div id="emptyState" class="empty-state-ads hidden">
+        <p>暂无广告数据，添加一条开始吧！</p>
+      </div>
+    </main>
+
+    <footer>
+      <p>跨平台广告分析系统 | Powered by Claude Code</p>
+    </footer>
+  </div>
+
+  <script src="ads.js"></script>
+</body>
+</html>
