@@ -87,6 +87,25 @@
     .data-stat { text-align: center; }
     .data-stat .num { font-size: 24px; font-weight: 700; }
     .data-stat .desc { font-size: 12px; color: #94a3b8; }
+
+    /* Version history */
+    .trend-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .trend-up { background: rgba(22,163,74,0.2); color: #4ade80; }
+    .trend-down { background: rgba(239,68,68,0.2); color: #fca5a5; }
+    .trend-flat { background: rgba(148,163,184,0.2); color: #94a3b8; }
+    .verdict-card { text-align: center; padding: 32px; background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 12px; border: 2px solid #334155; margin-bottom: 24px; }
+    .verdict-card .verdict { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .verdict-card .summary { font-size: 14px; color: #94a3b8; line-height: 1.8; max-width: 700px; margin: 0 auto; }
+    .sparkline { display: flex; align-items: flex-end; gap: 2px; height: 32px; }
+    .sparkline .spark-bar { flex: 1; border-radius: 2px 2px 0 0; min-width: 12px; transition: height 0.3s; }
+    .diff-positive { color: #4ade80; }
+    .diff-negative { color: #fca5a5; }
+    .diff-zero { color: #94a3b8; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .metric-trend-card { background: #0f172a; border-radius: 8px; padding: 16px; border: 1px solid #334155; }
+    .metric-trend-card .mtc-label { font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+    .metric-trend-card .mtc-row { display: flex; justify-content: space-between; align-items: center; }
+    .metric-trend-card .mtc-value { font-size: 22px; font-weight: 700; color: #f1f5f9; }
   </style>
 </head>
 <body>
@@ -100,6 +119,7 @@
       <button onclick="showTab('content')">内容分析</button>
       <button onclick="showTab('items')">道具转化</button>
       <button onclick="showTab('recommendations')">优化建议</button>
+      <button onclick="showTab('versionHistory')">版本趋势</button>
       <button onclick="refreshData()">刷新数据</button>
     </div>
   </div>
@@ -125,6 +145,9 @@
 
       <!-- Recommendations Tab -->
       <div id="tab-recommendations" class="tab-content"></div>
+
+      <!-- Version History Tab -->
+      <div id="tab-versionHistory" class="tab-content"></div>
     </div>
   </div>
 
@@ -181,6 +204,7 @@
       renderContent();
       renderItems();
       renderRecommendations();
+      renderVersionHistory();
     }
 
     function renderOverview() {
@@ -605,6 +629,159 @@
               <div class="rec-impact">预期效果: ${e(rec.expectedImpact)}</div>
             </div>
           `).join('')}
+        </div>
+      `;
+    }
+
+    function renderVersionHistory() {
+      const vh = reportData.versionHistoryAnalysis;
+      const el = document.getElementById('tab-versionHistory');
+
+      if (!vh) {
+        el.innerHTML = '<div class="section"><h2>暂无历史版本数据</h2></div>';
+        return;
+      }
+
+      const ta = vh.trendAssessment;
+      const verdictColor = { '良好发展': '#16a34a', '显著进步': '#2563eb', '稳步提升': '#3b82f6', '需要警惕': '#d97706', '亟需改善': '#ef4444' };
+
+      el.innerHTML = `
+        <!-- 综合趋势判定 -->
+        <div class="verdict-card" style="border-color:${verdictColor[ta.overallVerdict] || '#334155'}">
+          <div class="verdict" style="color:${verdictColor[ta.overallVerdict] || '#f1f5f9'}">${e(ta.overallVerdict)}</div>
+          <div class="summary">${e(ta.summary)}</div>
+          <div style="display:flex;justify-content:center;gap:32px;margin-top:16px">
+            <div class="metric"><div class="val diff-positive">+${ta.scoreImprovement}</div><div class="lbl">评分提升</div></div>
+            <div class="metric"><div class="val">${ta.avgRevenueGrowth}%</div><div class="lbl">版本均收入增速</div></div>
+            <div class="metric"><div class="val diff-positive">${ta.positiveMetrics.length}</div><div class="lbl">上升指标</div></div>
+            <div class="metric"><div class="val diff-negative">${ta.negativeMetrics.length}</div><div class="lbl">下降指标</div></div>
+          </div>
+        </div>
+
+        <!-- 版本概览表 -->
+        <div class="section">
+          <h2>版本概览（${vh.totalVersions}个版本 | ${vh.timespan.from} ~ ${vh.timespan.to}）</h2>
+          <table>
+            <tr><th>版本</th><th>名称</th><th>玩家数</th><th>综合评分</th><th>等级</th><th>总收入</th><th>付费率</th><th>7日留存</th><th>28日留存</th><th>满意度</th></tr>
+            ${vh.versionOverview.map((v, i) => `
+              <tr style="${i === vh.versionOverview.length - 1 ? 'background:rgba(59,130,246,0.1);font-weight:600' : ''}">
+                <td>${e(v.versionId)}</td>
+                <td>${e(v.versionName)}</td>
+                <td>${v.totalPlayers}</td>
+                <td style="color:${scoreColor(v.overallScore)}">${v.overallScore}</td>
+                <td><span class="grade grade-${v.overallGrade}">${v.overallGrade}</span></td>
+                <td>${v.totalRevenue.toLocaleString()}</td>
+                <td>${v.payingRate}%</td>
+                <td>${v.day7Retention}%</td>
+                <td>${v.day28Retention}%</td>
+                <td>${v.avgSatisfaction}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <!-- 核心指标趋势卡片 -->
+        <div class="section">
+          <h2>核心指标趋势</h2>
+          <div class="metric-grid">
+            ${Object.entries(vh.metricTrends).map(([key, trend]) => {
+              const vals = trend.values.map(v => v.value);
+              const maxVal = Math.max(...vals);
+              const latest = vals[vals.length - 1];
+              const dirClass = trend.direction.includes('上升') ? 'trend-up' : trend.direction.includes('下降') ? 'trend-down' : 'trend-flat';
+              const growthClass = trend.totalGrowth > 0 ? 'diff-positive' : trend.totalGrowth < 0 ? 'diff-negative' : 'diff-zero';
+              return `
+                <div class="metric-trend-card">
+                  <div class="mtc-label">${e(trend.label)}</div>
+                  <div class="mtc-row">
+                    <div class="mtc-value">${typeof latest === 'number' && latest > 1000 ? latest.toLocaleString() : latest}${trend.unit === '%' ? '%' : ''}</div>
+                    <div>
+                      <span class="trend-badge ${dirClass}">${e(trend.direction)}</span>
+                      <span class="${growthClass}" style="font-size:13px;margin-left:6px">${trend.totalGrowth > 0 ? '+' : ''}${trend.totalGrowth}%</span>
+                    </div>
+                  </div>
+                  <div class="sparkline" style="margin-top:8px">
+                    ${vals.map((v, i) => `<div class="spark-bar" style="height:${maxVal > 0 ? Math.max(4, v / maxVal * 32) : 4}px;background:${i === vals.length - 1 ? '#3b82f6' : '#475569'}" title="${trend.values[i].versionId}: ${v}"></div>`).join('')}
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-top:4px">
+                    <span>${trend.values[0].versionId}</span>
+                    <span>${trend.values[trend.values.length - 1].versionId}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- 版本间环比对比 -->
+        <div class="section">
+          <h2>版本间环比变化</h2>
+          ${vh.versionComparisons.map(comp => `
+            <h3>${e(comp.from)} ${e(comp.fromName)} → ${e(comp.to)} ${e(comp.toName)}</h3>
+            <table>
+              <tr><th>指标</th><th>上版本</th><th>本版本</th><th>变化</th><th>增长率</th><th>状态</th></tr>
+              ${Object.entries(comp.changes).map(([key, c]) => {
+                const statusClass = c.status === '提升' ? 'diff-positive' : c.status === '下降' ? 'diff-negative' : 'diff-zero';
+                const trendBadge = c.status === '提升' ? 'trend-up' : c.status === '下降' ? 'trend-down' : 'trend-flat';
+                return `
+                  <tr>
+                    <td>${e(c.label)}</td>
+                    <td>${typeof c.previous === 'number' && c.previous > 1000 ? c.previous.toLocaleString() : c.previous}</td>
+                    <td>${typeof c.current === 'number' && c.current > 1000 ? c.current.toLocaleString() : c.current}</td>
+                    <td class="${statusClass}">${c.diff > 0 ? '+' : ''}${typeof c.diff === 'number' && Math.abs(c.diff) > 1000 ? c.diff.toLocaleString() : c.diff}</td>
+                    <td class="${statusClass}">${c.growthRate > 0 ? '+' : ''}${c.growthRate}%</td>
+                    <td><span class="trend-badge ${trendBadge}">${e(c.status)}</span></td>
+                  </tr>
+                `;
+              }).join('')}
+            </table>
+          `).join('')}
+        </div>
+
+        <!-- 最佳/最差表现 -->
+        <div class="section">
+          <h2>历史最佳 / 最差表现</h2>
+          <table>
+            <tr><th>指标</th><th>最佳版本</th><th>最佳值</th><th>最差版本</th><th>最差值</th></tr>
+            ${Object.entries(vh.highlights).map(([key, h]) => `
+              <tr>
+                <td>${e(h.label)}</td>
+                <td style="color:#4ade80">${e(h.best.versionId)} ${e(h.best.versionName)}</td>
+                <td style="color:#4ade80;font-weight:600">${typeof h.best.value === 'number' && h.best.value > 1000 ? h.best.value.toLocaleString() : h.best.value}</td>
+                <td style="color:#fca5a5">${e(h.worst.versionId)} ${e(h.worst.versionName)}</td>
+                <td style="color:#fca5a5;font-weight:600">${typeof h.worst.value === 'number' && h.worst.value > 1000 ? h.worst.value.toLocaleString() : h.worst.value}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <!-- 上升/下降指标归类 -->
+        <div class="grid-2">
+          <div class="section">
+            <h2 style="color:#4ade80">上升指标 (${ta.positiveMetrics.length})</h2>
+            ${ta.positiveMetrics.length > 0 ? ta.positiveMetrics.map(m => `
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155">
+                <span>${e(m.metric)}</span>
+                <span><span class="trend-badge trend-up">${e(m.direction)}</span> <span class="diff-positive">+${m.growth}%</span></span>
+              </div>
+            `).join('') : '<p style="color:#64748b">无</p>'}
+          </div>
+          <div class="section">
+            <h2 style="color:#fca5a5">下降/波动指标 (${ta.negativeMetrics.length + ta.stableMetrics.length})</h2>
+            ${ta.negativeMetrics.map(m => `
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155">
+                <span>${e(m.metric)}</span>
+                <span><span class="trend-badge trend-down">${e(m.direction)}</span> <span class="diff-negative">${m.growth}%</span></span>
+              </div>
+            `).join('')}
+            ${ta.stableMetrics.map(m => `
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155">
+                <span>${e(m.metric)}</span>
+                <span><span class="trend-badge trend-flat">${e(m.direction)}</span> <span class="diff-zero">${m.growth > 0 ? '+' : ''}${m.growth}%</span></span>
+              </div>
+            `).join('')}
+            ${ta.negativeMetrics.length + ta.stableMetrics.length === 0 ? '<p style="color:#64748b">无</p>' : ''}
+          </div>
         </div>
       `;
     }
