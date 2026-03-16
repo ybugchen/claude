@@ -9,6 +9,11 @@ const { analyzeContentExperience } = require('../game-analytics/contentAnalysis'
 const { analyzeItemConversion } = require('../game-analytics/itemConversion');
 const { generateAssessment } = require('../game-analytics/assessmentEngine');
 const { analyzeVersionHistory, extractCurrentVersionSummary } = require('../game-analytics/versionHistory');
+const { analyzeChurnRisk } = require('../game-analytics/churnPrediction');
+const { analyzeEventROI } = require('../game-analytics/eventROI');
+const { analyzeCohorts } = require('../game-analytics/cohortAnalysis');
+const { detectAnomalies } = require('../game-analytics/anomalyDetection');
+const { analyzeABTests } = require('../game-analytics/abTestAnalysis');
 
 // 缓存分析结果（避免每次请求重新计算）
 let cachedResult = null;
@@ -56,6 +61,13 @@ function buildReport(cleanedData, cleanReport, historicalVersions) {
     versionHistoryAnalysis = analyzeVersionHistory(historicalVersions, currentSummary);
   }
 
+  // 新增分析模块
+  const churnAnalysis = analyzeChurnRisk(cleanedData);
+  const eventRoiAnalysis = analyzeEventROI(cleanedData);
+  const cohortAnalysis = analyzeCohorts(cleanedData);
+  const anomalyDetection = detectAnomalies(cleanedData, segmentation, itemConversion);
+  const abTestAnalysis = analyzeABTests(cleanedData);
+
   return {
     versionInfo: cleanedData.versionInfo,
     cleanReport,
@@ -64,6 +76,11 @@ function buildReport(cleanedData, cleanReport, historicalVersions) {
     itemConversion,
     assessment,
     versionHistoryAnalysis,
+    churnAnalysis,
+    eventRoiAnalysis,
+    cohortAnalysis,
+    anomalyDetection,
+    abTestAnalysis,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -111,6 +128,36 @@ router.get('/assessment', (req, res) => {
 router.get('/version-history', (req, res) => {
   if (!cachedResult) cachedResult = runFullAnalysis();
   res.json(cachedResult.versionHistoryAnalysis);
+});
+
+// 获取流失预警
+router.get('/churn', (req, res) => {
+  if (!cachedResult) cachedResult = runFullAnalysis();
+  res.json(cachedResult.churnAnalysis);
+});
+
+// 获取活动ROI分析
+router.get('/event-roi', (req, res) => {
+  if (!cachedResult) cachedResult = runFullAnalysis();
+  res.json(cachedResult.eventRoiAnalysis);
+});
+
+// 获取队列分析
+router.get('/cohorts', (req, res) => {
+  if (!cachedResult) cachedResult = runFullAnalysis();
+  res.json(cachedResult.cohortAnalysis);
+});
+
+// 获取异常检测
+router.get('/anomalies', (req, res) => {
+  if (!cachedResult) cachedResult = runFullAnalysis();
+  res.json(cachedResult.anomalyDetection);
+});
+
+// 获取A/B测试分析
+router.get('/ab-tests', (req, res) => {
+  if (!cachedResult) cachedResult = runFullAnalysis();
+  res.json(cachedResult.abTestAnalysis);
 });
 
 // 刷新数据（重新生成）

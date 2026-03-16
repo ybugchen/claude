@@ -120,6 +120,12 @@
       <button onclick="showTab('items')">道具转化</button>
       <button onclick="showTab('recommendations')">优化建议</button>
       <button onclick="showTab('versionHistory')">版本趋势</button>
+      <button onclick="showTab('kpiAchievement')">目标达成</button>
+      <button onclick="showTab('churn')">流失预警</button>
+      <button onclick="showTab('eventRoi')">活动效益</button>
+      <button onclick="showTab('cohort')">队列分析</button>
+      <button onclick="showTab('anomaly')">异常监测</button>
+      <button onclick="showTab('abTest')">A/B测试</button>
       <button onclick="refreshData()">刷新数据</button>
     </div>
   </div>
@@ -148,6 +154,24 @@
 
       <!-- Version History Tab -->
       <div id="tab-versionHistory" class="tab-content"></div>
+
+      <!-- KPI Achievement Tab -->
+      <div id="tab-kpiAchievement" class="tab-content"></div>
+
+      <!-- Churn Prediction Tab -->
+      <div id="tab-churn" class="tab-content"></div>
+
+      <!-- Event ROI Tab -->
+      <div id="tab-eventRoi" class="tab-content"></div>
+
+      <!-- Cohort Analysis Tab -->
+      <div id="tab-cohort" class="tab-content"></div>
+
+      <!-- Anomaly Detection Tab -->
+      <div id="tab-anomaly" class="tab-content"></div>
+
+      <!-- A/B Test Tab -->
+      <div id="tab-abTest" class="tab-content"></div>
     </div>
   </div>
 
@@ -205,6 +229,12 @@
       renderItems();
       renderRecommendations();
       renderVersionHistory();
+      renderKpiAchievement();
+      renderChurn();
+      renderEventRoi();
+      renderCohort();
+      renderAnomaly();
+      renderAbTest();
     }
 
     function renderOverview() {
@@ -783,6 +813,539 @@
             ${ta.negativeMetrics.length + ta.stableMetrics.length === 0 ? '<p style="color:#64748b">无</p>' : ''}
           </div>
         </div>
+      `;
+    }
+
+    function renderKpiAchievement() {
+      const a = reportData.assessment;
+      const pva = a.planVsActual;
+      const el = document.getElementById('tab-kpiAchievement');
+
+      if (!pva) {
+        el.innerHTML = '<div class="section"><h2>暂无策划目标数据</h2><p style="color:#94a3b8">当前版本数据中无 planningContext，无法进行目标达成分析。</p></div>';
+        return;
+      }
+
+      const achievedCount = pva.overallMetrics.filter(m => m.status === '达标').length;
+      const nearCount = pva.overallMetrics.filter(m => m.status === '接近').length;
+      const missedCount = pva.overallMetrics.filter(m => m.status === '未达标').length;
+      const rate = pva.overallAchievementRate;
+      const grade = rate >= 90 ? 'S' : rate >= 75 ? 'A' : rate >= 60 ? 'B' : rate >= 40 ? 'C' : rate >= 20 ? 'D' : 'F';
+
+      const statusColor = (status) => status === '达标' ? '#16a34a' : status === '接近' ? '#d97706' : '#ef4444';
+      const statusIcon = (status) => status === '达标' ? '✓' : status === '接近' ? '△' : '✗';
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">总达标率</div>
+            <div class="score" style="color:${scoreColor(rate)}">${rate}%</div>
+            <div class="grade grade-${grade}">${grade}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">达标指标</div>
+            <div class="score" style="color:#16a34a">${achievedCount}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">接近达标</div>
+            <div class="score" style="color:#d97706">${nearCount}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">未达标</div>
+            <div class="score" style="color:#ef4444">${missedCount}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>整体KPI达成情况</h2>
+          <div style="display:flex;gap:4px;height:8px;border-radius:4px;overflow:hidden;margin-bottom:16px">
+            <div style="flex:${achievedCount};background:#16a34a"></div>
+            <div style="flex:${nearCount};background:#d97706"></div>
+            <div style="flex:${missedCount};background:#ef4444"></div>
+          </div>
+          <table>
+            <tr><th>指标</th><th>目标值</th><th>实际值</th><th>差距</th><th>差距%</th><th>达成进度</th><th>状态</th></tr>
+            ${pva.overallMetrics.map(m => {
+              const progress = m.target > 0 ? Math.min(120, Math.round(m.actual / m.target * 100)) : 0;
+              return `
+                <tr>
+                  <td><strong>${e(m.metric)}</strong></td>
+                  <td>${m.target}${e(m.unit)}</td>
+                  <td>${m.actual}${e(m.unit)}</td>
+                  <td style="color:${m.gap >= 0 ? '#4ade80' : '#fca5a5'}">${m.gap >= 0 ? '+' : ''}${m.gap}${e(m.unit)}</td>
+                  <td style="color:${m.gapPercent >= 0 ? '#4ade80' : '#fca5a5'}">${m.gapPercent >= 0 ? '+' : ''}${m.gapPercent}%</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="flex:1;background:#334155;border-radius:4px;height:16px;overflow:hidden">
+                        <div style="width:${Math.min(100, progress)}%;height:100%;background:${statusColor(m.status)};border-radius:4px"></div>
+                      </div>
+                      <span style="font-size:12px;color:#94a3b8;width:36px">${progress}%</span>
+                    </div>
+                  </td>
+                  <td><span style="color:${statusColor(m.status)};font-weight:600">${statusIcon(m.status)} ${e(m.status)}</span></td>
+                </tr>
+              `;
+            }).join('')}
+          </table>
+        </div>
+
+        ${pva.contentMetrics.length > 0 ? `
+        <div class="section">
+          <h2>各内容达成情况</h2>
+          <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <span style="padding:4px 12px;border-radius:4px;font-size:13px;background:rgba(22,163,74,0.2);color:#4ade80">
+              全部达标: ${pva.contentMetrics.filter(c => c.overallStatus === '全部达标').length}
+            </span>
+            <span style="padding:4px 12px;border-radius:4px;font-size:13px;background:rgba(217,119,6,0.2);color:#fcd34d">
+              部分达标: ${pva.contentMetrics.filter(c => c.overallStatus === '部分达标').length}
+            </span>
+            <span style="padding:4px 12px;border-radius:4px;font-size:13px;background:rgba(239,68,68,0.2);color:#fca5a5">
+              多数未达标: ${pva.contentMetrics.filter(c => c.overallStatus === '多数未达标').length}
+            </span>
+          </div>
+
+          <div class="bar-chart" style="margin-bottom:20px">
+            ${pva.contentMetrics.sort((a,b) => b.achievementRate - a.achievementRate).map(cm => `
+              <div class="bar-row">
+                <div class="bar-label">${e(cm.name)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${cm.achievementRate}%;background:${cm.overallStatus === '全部达标' ? '#16a34a' : cm.overallStatus === '部分达标' ? '#d97706' : '#ef4444'}">${cm.achievementRate}%</div></div>
+                <div class="bar-value" style="width:80px">${e(cm.overallStatus)}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="grid-2">
+            ${pva.contentMetrics.map(cm => `
+              <div class="section" style="margin-bottom:0">
+                <h3>${e(cm.name)} <span style="font-size:12px;color:#94a3b8">${e(cm.type)}</span>
+                  <span style="float:right;color:${cm.overallStatus === '全部达标' ? '#16a34a' : cm.overallStatus === '部分达标' ? '#d97706' : '#ef4444'};font-size:13px">${e(cm.overallStatus)} (${cm.achievementRate}%)</span>
+                </h3>
+                ${cm.designGoal ? `<p style="font-size:12px;color:#64748b;margin-bottom:8px">设计目标: ${e(cm.designGoal)}</p>` : ''}
+                <table>
+                  <tr><th>维度</th><th>目标</th><th>实际</th><th>差距</th><th>状态</th></tr>
+                  ${cm.dimensions.map(d => `
+                    <tr>
+                      <td>${e(d.metric)}</td>
+                      <td>${d.target}${e(d.unit)}</td>
+                      <td>${d.actual}${e(d.unit)}</td>
+                      <td style="color:${d.gap >= 0 ? '#4ade80' : '#fca5a5'}">${d.gap >= 0 ? '+' : ''}${d.gap}${e(d.unit)} (${d.gapPercent >= 0 ? '+' : ''}${d.gapPercent}%)</td>
+                      <td><span style="color:${statusColor(d.status)};font-weight:600">${statusIcon(d.status)} ${e(d.status)}</span></td>
+                    </tr>
+                  `).join('')}
+                </table>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        ` : ''}
+
+        ${pva.goalReview && pva.goalReview.length > 0 ? `
+        <div class="section">
+          <h2>版本目标复盘</h2>
+          ${pva.goalReview.map(gr => {
+            const icon = gr.assessment.status === '达成' ? '✓' : gr.assessment.status === '未完全达成' ? '△' : gr.assessment.status === '未达成' ? '✗' : '?';
+            const color = gr.assessment.status === '达成' ? '#16a34a' : gr.assessment.status === '未完全达成' ? '#d97706' : gr.assessment.status === '未达成' ? '#ef4444' : '#94a3b8';
+            return `
+              <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #334155;align-items:flex-start">
+                <span style="font-size:20px;color:${color};flex-shrink:0">${icon}</span>
+                <div>
+                  <div style="font-size:14px;color:#e2e8f0;margin-bottom:4px">${e(gr.goal)}</div>
+                  <div style="font-size:13px;color:${color};font-weight:600;margin-bottom:2px">${e(gr.assessment.status)}</div>
+                  <div style="font-size:12px;color:#94a3b8">${e(gr.assessment.evidence)}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        ` : ''}
+      `;
+    }
+
+    function renderChurn() {
+      const el = document.getElementById('tab-churn');
+      const churn = reportData.churnAnalysis;
+      if (!churn) {
+        el.innerHTML = '<div class="section"><h2>流失预警分析</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      const riskColors = { '高危': '#ef4444', '中危': '#d97706', '低危': '#3b82f6', '安全': '#16a34a' };
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">总玩家数</div>
+            <div class="score">${churn.summary.totalPlayers}</div>
+          </div>
+          ${Object.entries(churn.summary.riskDistribution).map(([level, data]) => `
+            <div class="score-card">
+              <div class="label">${e(level)}</div>
+              <div class="score" style="color:${riskColors[level]}">${data.count}</div>
+              <div style="font-size:13px;color:#94a3b8">${data.percentage}%</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="section">
+          <h2>风险分布</h2>
+          <div class="bar-chart">
+            ${Object.entries(churn.summary.riskDistribution).map(([level, data]) => `
+              <div class="bar-row">
+                <div class="bar-label">${e(level)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${data.percentage}%;background:${riskColors[level]}">${data.percentage}%</div></div>
+                <div class="bar-value">${data.count}人</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>流失信号统计</h2>
+            <div class="bar-chart">
+              ${churn.signalStats.map(s => `
+                <div class="bar-row">
+                  <div class="bar-label">${e(s.signal)}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${s.percentage}%;background:#d97706">${s.count}</div></div>
+                  <div class="bar-value">${s.percentage}%</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>付费层级 x 流失风险</h2>
+            <table>
+              <tr><th>付费层级</th><th>高危</th><th>中危</th><th>低危</th><th>安全</th></tr>
+              ${Object.entries(churn.payTierRisk).map(([tier, risks]) => `
+                <tr>
+                  <td><strong>${e(tier)}</strong></td>
+                  <td style="color:#ef4444">${risks['高危'] || 0}</td>
+                  <td style="color:#d97706">${risks['中危'] || 0}</td>
+                  <td style="color:#3b82f6">${risks['低危'] || 0}</td>
+                  <td style="color:#16a34a">${risks['安全'] || 0}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>高危玩家列表 (前20)</h2>
+          <table>
+            <tr><th>玩家ID</th><th>等级</th><th>付费层级</th><th>风险分</th><th>活跃天数</th><th>在线时长</th><th>风险信号</th><th>建议操作</th></tr>
+            ${churn.highRiskPlayers.slice(0, 20).map(p => `
+              <tr>
+                <td>${e(p.playerId)}</td>
+                <td>${e(p.level)}</td>
+                <td>${e(p.payTier)}</td>
+                <td style="color:#ef4444;font-weight:700">${p.riskScore}</td>
+                <td>${p.activeDays}</td>
+                <td>${p.avgOnlineMinutes}分钟</td>
+                <td style="font-size:12px">${p.signals.map(s => e(s)).join(', ')}</td>
+                <td style="font-size:12px;color:#22d3ee">${e(p.action)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderEventRoi() {
+      const el = document.getElementById('tab-eventRoi');
+      const events = reportData.eventRoiAnalysis;
+      if (!events) {
+        el.innerHTML = '<div class="section"><h2>活动效益分析</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">活动总数</div>
+            <div class="score">${events.summary.totalEvents}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">平均ROI</div>
+            <div class="score" style="color:${events.summary.avgRoi > 0 ? '#16a34a' : '#ef4444'}">${events.summary.avgRoi}%</div>
+          </div>
+          <div class="score-card">
+            <div class="label">增量总收入</div>
+            <div class="score">${events.summary.totalIncrementalRevenue.toLocaleString()}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">平均参与率</div>
+            <div class="score">${events.summary.avgParticipationRate}%</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>活动ROI排行</h2>
+          <div class="bar-chart">
+            ${events.events.sort((a,b) => b.roi - a.roi).map(ev => `
+              <div class="bar-row">
+                <div class="bar-label">${e(ev.name)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, Math.max(5, ev.roi / 2))}%;background:${ev.roi > 50 ? '#16a34a' : ev.roi > 0 ? '#3b82f6' : '#ef4444'}">${ev.roi}%</div></div>
+                <div class="bar-value">${e(ev.type)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>活动详细分析</h2>
+          <table>
+            <tr><th>活动名称</th><th>类型</th><th>参与率</th><th>完成率</th><th>基线收入</th><th>增量收入</th><th>成本</th><th>ROI</th><th>留存提升</th></tr>
+            ${events.events.map(ev => `
+              <tr>
+                <td><strong>${e(ev.name)}</strong></td>
+                <td>${e(ev.type)}</td>
+                <td>${ev.participationRate}%</td>
+                <td>${ev.completionRate}%</td>
+                <td>${ev.baselineRevenue.toLocaleString()}</td>
+                <td style="color:${ev.incrementalRevenue > 0 ? '#4ade80' : '#fca5a5'}">${ev.incrementalRevenue > 0 ? '+' : ''}${ev.incrementalRevenue.toLocaleString()}</td>
+                <td>${ev.cost.toLocaleString()}</td>
+                <td style="color:${ev.roi > 0 ? '#4ade80' : '#fca5a5'};font-weight:700">${ev.roi}%</td>
+                <td style="color:#22d3ee">Day7 +${ev.retentionLift.day7}pp</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>活动类型对比</h2>
+          <table>
+            <tr><th>类型</th><th>活动数</th><th>平均参与率</th><th>平均ROI</th><th>总增量收入</th></tr>
+            ${Object.entries(events.typeComparison).map(([type, d]) => `
+              <tr>
+                <td><strong>${e(type)}</strong></td>
+                <td>${d.count}</td>
+                <td>${d.avgParticipation}%</td>
+                <td style="color:${d.avgRoi > 0 ? '#4ade80' : '#fca5a5'}">${d.avgRoi}%</td>
+                <td>${d.totalRevenue.toLocaleString()}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function renderCohort() {
+      const el = document.getElementById('tab-cohort');
+      const cohort = reportData.cohortAnalysis;
+      if (!cohort) {
+        el.innerHTML = '<div class="section"><h2>队列分析</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      const retentionColor = (val) => val >= 50 ? '#16a34a' : val >= 30 ? '#2563eb' : val >= 15 ? '#d97706' : '#ef4444';
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">队列总数</div>
+            <div class="score">${cohort.cohorts.length}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">最佳队列</div>
+            <div class="score" style="font-size:16px;margin-top:8px">${e(cohort.bestCohort.key)}</div>
+            <div style="font-size:12px;color:#94a3b8">D7留存 ${cohort.bestCohort.day7Retention}%</div>
+          </div>
+          <div class="score-card">
+            <div class="label">平均Day7留存</div>
+            <div class="score" style="color:${retentionColor(cohort.summary.avgDay7Retention)}">${cohort.summary.avgDay7Retention}%</div>
+          </div>
+          <div class="score-card">
+            <div class="label">平均LTV(30天)</div>
+            <div class="score">${cohort.summary.avgLtv30}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>留存矩阵</h2>
+          <table>
+            <tr><th>队列</th><th>人数</th><th>Day1</th><th>Day3</th><th>Day7</th><th>Day14</th><th>Day28</th></tr>
+            ${cohort.cohorts.map(c => `
+              <tr>
+                <td><strong>${e(c.key)}</strong></td>
+                <td>${c.size}</td>
+                ${['day1','day3','day7','day14','day28'].map(d => `
+                  <td style="background:${retentionColor(c.retention[d])}22;color:${retentionColor(c.retention[d])};font-weight:600;text-align:center">${c.retention[d]}%</td>
+                `).join('')}
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="section">
+            <h2>队列LTV对比</h2>
+            <table>
+              <tr><th>队列</th><th>7天LTV</th><th>14天LTV</th><th>30天LTV</th></tr>
+              ${cohort.cohorts.map(c => `
+                <tr>
+                  <td><strong>${e(c.key)}</strong></td>
+                  <td>${c.ltv.day7}元</td>
+                  <td>${c.ltv.day14}元</td>
+                  <td style="font-weight:600">${c.ltv.day30}元</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>队列付费转化</h2>
+            <div class="bar-chart">
+              ${cohort.cohorts.map(c => `
+                <div class="bar-row">
+                  <div class="bar-label">${e(c.key)}</div>
+                  <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, c.payConversion * 5)}%;background:#3b82f6">${c.payConversion}%</div></div>
+                  <div class="bar-value">${c.size}人</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAnomaly() {
+      const el = document.getElementById('tab-anomaly');
+      const anomaly = reportData.anomalyDetection;
+      if (!anomaly) {
+        el.innerHTML = '<div class="section"><h2>异常监测</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      const sevColor = { 'critical': '#ef4444', 'warning': '#d97706', 'info': '#3b82f6' };
+      const sevLabel = { 'critical': '严重', 'warning': '警告', 'info': '提示' };
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">异常总数</div>
+            <div class="score">${anomaly.summary.total}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">严重</div>
+            <div class="score" style="color:#ef4444">${anomaly.summary.critical}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">警告</div>
+            <div class="score" style="color:#d97706">${anomaly.summary.warning}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">提示</div>
+            <div class="score" style="color:#3b82f6">${anomaly.summary.info}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>异常事件列表</h2>
+          ${anomaly.anomalies.map(a => `
+            <div class="rec-card" style="border-left-color:${sevColor[a.severity]}">
+              <div class="rec-header">
+                <span class="rec-category">${e(a.category)}</span>
+                <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:${sevColor[a.severity]}33;color:${sevColor[a.severity]}">${sevLabel[a.severity]}</span>
+              </div>
+              <div class="rec-issue">${e(a.description)}</div>
+              <div style="display:flex;gap:16px;font-size:13px;color:#94a3b8;margin-top:8px">
+                <span>当前值: <strong style="color:#e2e8f0">${a.currentValue}</strong></span>
+                <span>预期范围: ${a.expectedRange[0]} ~ ${a.expectedRange[1]}</span>
+                <span>偏离: <strong style="color:${sevColor[a.severity]}">${a.deviation}σ</strong></span>
+              </div>
+              <div style="font-size:12px;color:#94a3b8;margin-top:6px">可能原因: ${e(a.possibleCause)}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        ${anomaly.playerAnomalies && anomaly.playerAnomalies.length > 0 ? `
+        <div class="section">
+          <h2>异常玩家 (${anomaly.playerAnomalies.length})</h2>
+          <table>
+            <tr><th>玩家ID</th><th>异常类型</th><th>异常值</th><th>偏离度</th><th>严重等级</th></tr>
+            ${anomaly.playerAnomalies.slice(0, 20).map(p => `
+              <tr>
+                <td>${e(p.playerId)}</td>
+                <td>${e(p.type)}</td>
+                <td style="font-weight:600">${p.value}</td>
+                <td style="color:${sevColor[p.severity]}">${p.deviation}σ</td>
+                <td><span style="color:${sevColor[p.severity]}">${sevLabel[p.severity]}</span></td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+        ` : ''}
+
+        <div class="section">
+          <h2>异常类型分布</h2>
+          <div class="bar-chart">
+            ${Object.entries(anomaly.typeDistribution).map(([type, count]) => `
+              <div class="bar-row">
+                <div class="bar-label">${e(type)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, count / anomaly.summary.total * 100)}%;background:#d97706">${count}</div></div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAbTest() {
+      const el = document.getElementById('tab-abTest');
+      const ab = reportData.abTestAnalysis;
+      if (!ab) {
+        el.innerHTML = '<div class="section"><h2>A/B测试分析</h2><p style="color:#94a3b8">暂无数据</p></div>';
+        return;
+      }
+
+      el.innerHTML = `
+        <div class="score-overview">
+          <div class="score-card">
+            <div class="label">测试总数</div>
+            <div class="score">${ab.tests.length}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">显著结果</div>
+            <div class="score" style="color:#16a34a">${ab.tests.filter(t => t.results.significant).length}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">进行中</div>
+            <div class="score" style="color:#3b82f6">${ab.tests.filter(t => t.status === 'running').length}</div>
+          </div>
+          <div class="score-card">
+            <div class="label">已完成</div>
+            <div class="score">${ab.tests.filter(t => t.status === 'completed').length}</div>
+          </div>
+        </div>
+
+        ${ab.tests.map(test => `
+        <div class="section">
+          <h2>${e(test.name)} <span style="font-size:13px;padding:2px 8px;border-radius:4px;background:${test.status === 'completed' ? '#16a34a' : '#3b82f6'}33;color:${test.status === 'completed' ? '#16a34a' : '#3b82f6'}">${test.status === 'completed' ? '已完成' : '进行中'}</span></h2>
+          <p style="color:#94a3b8;font-size:13px;margin-bottom:16px">假设: ${e(test.hypothesis)}</p>
+
+          <table>
+            <tr><th>分组</th><th>样本量</th>${Object.keys(test.groups[0].metrics).map(k => `<th>${e(k)}</th>`).join('')}</tr>
+            ${test.groups.map(g => `
+              <tr>
+                <td><strong>${e(g.name)}</strong></td>
+                <td>${g.size}</td>
+                ${Object.values(g.metrics).map(v => `<td>${v}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </table>
+
+          <div style="margin-top:16px;padding:16px;background:#0f172a;border-radius:8px;border:1px solid ${test.results.significant ? '#16a34a' : '#475569'}">
+            <div style="display:flex;gap:24px;flex-wrap:wrap">
+              <div class="metric"><div class="val" style="color:${test.results.significant ? '#4ade80' : '#94a3b8'}">${test.results.lift}</div><div class="lbl">效果量</div></div>
+              <div class="metric"><div class="val">${test.results.pValue}</div><div class="lbl">p-value</div></div>
+              <div class="metric"><div class="val" style="color:${test.results.significant ? '#4ade80' : '#fca5a5'}">${test.results.significant ? '显著' : '不显著'}</div><div class="lbl">统计显著性</div></div>
+              <div class="metric"><div class="val">${test.results.confidence}%</div><div class="lbl">置信度</div></div>
+            </div>
+            <div style="margin-top:12px;font-size:14px;color:#22d3ee">${e(test.results.recommendation)}</div>
+          </div>
+        </div>
+        `).join('')}
       `;
     }
 
