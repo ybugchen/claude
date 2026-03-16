@@ -1,6 +1,8 @@
 /**
  * 数据清洗模块
  * 处理缺失值、异常值、重复数据、数据类型校验
+ *
+ * 性能优化：使用计数器替代 cleanLog.filter() 统计，避免大数据量下重复遍历日志数组
  */
 
 function cleanGameData(rawData) {
@@ -19,28 +21,28 @@ function cleanGameData(rawData) {
   report.removedRecords.players = rawData.players.length - players.length;
   report.issues.push(...playerLog);
 
-  // 2. 清洗登录记录
-  const { records: loginRecords, cleanLog: loginLog } = cleanLoginRecords(rawData.loginRecords);
+  // 2. 清洗登录记录 — fixedCount 直接返回，避免 filter 统计
+  const { records: loginRecords, cleanLog: loginLog, fixedCount: loginFixed } = cleanLoginRecords(rawData.loginRecords);
   report.original.loginRecords = rawData.loginRecords.length;
   report.cleaned.loginRecords = loginRecords.length;
   report.removedRecords.loginRecords = rawData.loginRecords.length - loginRecords.length;
-  report.fixedRecords.loginRecords = loginLog.filter(l => l.type === 'fixed').length;
+  report.fixedRecords.loginRecords = loginFixed;
   report.issues.push(...loginLog);
 
   // 3. 清洗内容体验数据
-  const { records: contentRecords, cleanLog: contentLog } = cleanContentExperience(rawData.contentExperience);
+  const { records: contentRecords, cleanLog: contentLog, fixedCount: contentFixed } = cleanContentExperience(rawData.contentExperience);
   report.original.contentExperience = rawData.contentExperience.length;
   report.cleaned.contentExperience = contentRecords.length;
   report.removedRecords.contentExperience = rawData.contentExperience.length - contentRecords.length;
-  report.fixedRecords.contentExperience = contentLog.filter(l => l.type === 'fixed').length;
+  report.fixedRecords.contentExperience = contentFixed;
   report.issues.push(...contentLog);
 
   // 4. 清洗道具交易数据
-  const { records: itemRecords, cleanLog: itemLog } = cleanItemTransactions(rawData.itemTransactions);
+  const { records: itemRecords, cleanLog: itemLog, fixedCount: itemFixed } = cleanItemTransactions(rawData.itemTransactions);
   report.original.itemTransactions = rawData.itemTransactions.length;
   report.cleaned.itemTransactions = itemRecords.length;
   report.removedRecords.itemTransactions = rawData.itemTransactions.length - itemRecords.length;
-  report.fixedRecords.itemTransactions = itemLog.filter(l => l.type === 'fixed').length;
+  report.fixedRecords.itemTransactions = itemFixed;
   report.issues.push(...itemLog);
 
   return {
@@ -75,6 +77,7 @@ function cleanPlayers(players) {
 function cleanLoginRecords(records) {
   const cleanLog = [];
   const cleaned = [];
+  let fixedCount = 0;
 
   for (const r of records) {
     // 移除缺少playerId的记录
@@ -86,26 +89,30 @@ function cleanLoginRecords(records) {
     if (r.totalOnlineMinutes < 0) {
       cleanLog.push({ type: 'fixed', field: 'loginRecords', reason: `负数在线时长修正: ${r.totalOnlineMinutes} -> 0` });
       r.totalOnlineMinutes = 0;
+      fixedCount++;
     }
     // 修复异常在线时长（超过24小时）
     if (r.totalOnlineMinutes > 1440) {
       cleanLog.push({ type: 'fixed', field: 'loginRecords', reason: `异常在线时长截断: ${r.totalOnlineMinutes} -> 1440` });
       r.totalOnlineMinutes = 1440;
+      fixedCount++;
     }
     // 修复sessionCount为0但有在线时长
     if (r.sessionCount === 0 && r.totalOnlineMinutes > 0) {
       cleanLog.push({ type: 'fixed', field: 'loginRecords', reason: `sessionCount修正: 0 -> 1` });
       r.sessionCount = 1;
+      fixedCount++;
     }
     cleaned.push(r);
   }
 
-  return { records: cleaned, cleanLog };
+  return { records: cleaned, cleanLog, fixedCount };
 }
 
 function cleanContentExperience(records) {
   const cleanLog = [];
   const cleaned = [];
+  let fixedCount = 0;
 
   for (const r of records) {
     if (!r.playerId || !r.contentId) {
@@ -116,25 +123,29 @@ function cleanContentExperience(records) {
     if (r.satisfaction > 5 || r.satisfaction < 1) {
       cleanLog.push({ type: 'fixed', field: 'contentExperience', reason: `满意度越界修正: ${r.satisfaction} -> clamp(1,5)` });
       r.satisfaction = Math.max(1, Math.min(5, r.satisfaction));
+      fixedCount++;
     }
     // 修复完成率越界
     if (r.completionRate > 1) {
       cleanLog.push({ type: 'fixed', field: 'contentExperience', reason: `完成率越界修正: ${r.completionRate} -> 1` });
       r.completionRate = 1;
+      fixedCount++;
     }
     if (r.completionRate < 0) {
       cleanLog.push({ type: 'fixed', field: 'contentExperience', reason: `完成率越界修正: ${r.completionRate} -> 0` });
       r.completionRate = 0;
+      fixedCount++;
     }
     cleaned.push(r);
   }
 
-  return { records: cleaned, cleanLog };
+  return { records: cleaned, cleanLog, fixedCount };
 }
 
 function cleanItemTransactions(records) {
   const cleanLog = [];
   const cleaned = [];
+  let fixedCount = 0;
 
   for (const r of records) {
     if (!r.playerId || !r.itemId) {
@@ -150,11 +161,12 @@ function cleanItemTransactions(records) {
     if (r.totalSpent === null || r.totalSpent === undefined) {
       r.totalSpent = r.unitPrice * r.quantity;
       cleanLog.push({ type: 'fixed', field: 'itemTransactions', reason: `重新计算totalSpent: ${r.totalSpent}` });
+      fixedCount++;
     }
     cleaned.push(r);
   }
 
-  return { records: cleaned, cleanLog };
+  return { records: cleaned, cleanLog, fixedCount };
 }
 
 module.exports = { cleanGameData };

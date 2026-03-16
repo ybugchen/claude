@@ -1,28 +1,38 @@
 /**
  * 版本新内容体验分析模块
  * 分析各内容的参与度、完成率、满意度、留存贡献
+ *
+ * 性能优化：
+ * - 预建 contentExp 按 contentId/playerId 的 Map 索引，避免多函数重复 filter
+ * - 预建 loginRecords 按 playerId 的 Map 索引，留存计算从 O(players×records) 降为 O(players+records)
+ * - getRetention 结果缓存，retentionLift 不再重复调用
  */
 
 function analyzeContentExperience(cleanedData) {
   const { contentExperience, players, loginRecords, versionInfo } = cleanedData;
 
+  // 预建索引 — 只遍历一次
+  const expByContent = groupBy(contentExperience, 'contentId');
+  const expByPlayer = groupBy(contentExperience, 'playerId');
+  const loginByPlayer = groupBy(loginRecords, 'playerId');
+
   // 1. 各内容总览分析
-  const contentOverview = analyzeContentOverview(contentExperience, players, versionInfo);
+  const contentOverview = analyzeContentOverview(expByContent, players, versionInfo);
 
   // 2. 内容参与漏斗
-  const contentFunnel = analyzeContentFunnel(contentExperience, players, versionInfo);
+  const contentFunnel = analyzeContentFunnel(expByPlayer, players, versionInfo);
 
   // 3. 内容对留存的影响
-  const contentRetentionImpact = analyzeRetentionImpact(contentExperience, loginRecords, players);
+  const contentRetentionImpact = analyzeRetentionImpact(expByPlayer, loginByPlayer, players);
 
   // 4. 内容满意度排名
-  const satisfactionRanking = computeSatisfactionRanking(contentExperience, versionInfo);
+  const satisfactionRanking = computeSatisfactionRanking(expByContent, versionInfo);
 
   // 5. 内容类型对比
   const typeComparison = analyzeByType(contentExperience, players);
 
   // 6. 首次体验时间分布
-  const firstPlayDistribution = analyzeFirstPlayDistribution(contentExperience, versionInfo);
+  const firstPlayDistribution = analyzeFirstPlayDistribution(expByContent, versionInfo);
 
   return {
     contentOverview,
@@ -34,140 +44,197 @@ function analyzeContentExperience(cleanedData) {
   };
 }
 
-function analyzeContentOverview(contentExp, players, versionInfo) {
+function analyzeContentOverview(expByContent, players, versionInfo) {
   const overview = {};
-  for (const content of versionInfo.newContentList) {
-    const records = contentExp.filter(r => r.contentId === content.id);
-    const participantCount = records.length;
-    const participationRate = Math.round((participantCount / players.length) * 10000) / 100;
+  const totalPlayers = players.length;
 
+  for (const content of versionInfo.newContentList) {
+    const records = expByContent.get(content.id) || [];
+    const participantCount = records.length;
+
+    // 内联聚合，避免多次 map + reduce
+    let sumTimes = 0, sumCompletion = 0, sumSatisfaction = 0, sumDuration = 0, sumPlaySessions = 0;
+    for (const r of records) {
+      sumTimes += r.participationTimes;
+      sumCompletion += r.completionRate;
+      sumSatisfaction += r.satisfaction;
+      sumDuration += r.avgDurationMinutes;
+      sumPlaySessions += r.participationTimes;
+    }
+
+    const count = participantCount || 1;
     overview[content.id] = {
       name: content.name,
       type: content.type,
       participantCount,
-      participationRate,
-      avgParticipationTimes: avg(records.map(r => r.participationTimes)),
-      avgCompletionRate: avg(records.map(r => r.completionRate)) * 100,
-      avgSatisfaction: avg(records.map(r => r.satisfaction)),
-      avgDurationMinutes: avg(records.map(r => r.avgDurationMinutes)),
-      totalPlaySessions: records.reduce((s, r) => s + r.participationTimes, 0),
+      participationRate: Math.round((participantCount / totalPlayers) * 10000) / 100,
+      avgParticipationTimes: Math.round(sumTimes / count * 100) / 100,
+      avgCompletionRate: Math.round(sumCompletion / count * 100 * 100) / 100,
+      avgSatisfaction: Math.round(sumSatisfaction / count * 100) / 100,
+      avgDurationMinutes: Math.round(sumDuration / count * 100) / 100,
+      totalPlaySessions: sumPlaySessions,
     };
   }
   return overview;
 }
 
-function analyzeContentFunnel(contentExp, players, versionInfo) {
+function analyzeContentFunnel(expByPlayer, players, versionInfo) {
   // 漏斗：全部玩家 -> 接触版本内容 -> 参与多个内容 -> 深度参与（高完成率）
-  const playersWithContent = new Set(contentExp.map(r => r.playerId));
-  const contentCountByPlayer = {};
+  const totalPlayers = players.length;
+  let touchedCount = 0;
+  let multiContentCount = 0;
+  let allContentCount = 0;
+  const deepPlayerSet = new Set();
+  const contentListSize = versionInfo.newContentList.length;
 
-  for (const r of contentExp) {
-    contentCountByPlayer[r.playerId] = (contentCountByPlayer[r.playerId] || 0) + 1;
+  for (const [playerId, records] of expByPlayer) {
+    touchedCount++;
+    const contentCount = records.length;
+    if (contentCount >= 3) multiContentCount++;
+    if (contentCount >= contentListSize) allContentCount++;
+    for (const r of records) {
+      if (r.completionRate >= 0.8 && r.participationTimes >= 5) {
+        deepPlayerSet.add(playerId);
+        break; // 只需标记一次
+      }
+    }
   }
 
-  const multiContentPlayers = Object.values(contentCountByPlayer).filter(c => c >= 3).length;
-  const allContentPlayers = Object.values(contentCountByPlayer).filter(c => c >= versionInfo.newContentList.length).length;
-  const deepPlayers = contentExp
-    .filter(r => r.completionRate >= 0.8 && r.participationTimes >= 5)
-    .map(r => r.playerId);
-  const uniqueDeepPlayers = new Set(deepPlayers).size;
-
   return {
-    totalPlayers: players.length,
-    touchedNewContent: playersWithContent.size,
-    touchedRate: Math.round((playersWithContent.size / players.length) * 10000) / 100,
-    multiContentPlayers,
-    multiContentRate: Math.round((multiContentPlayers / players.length) * 10000) / 100,
-    allContentPlayers,
-    allContentRate: Math.round((allContentPlayers / players.length) * 10000) / 100,
-    deepEngagedPlayers: uniqueDeepPlayers,
-    deepEngagedRate: Math.round((uniqueDeepPlayers / players.length) * 10000) / 100,
+    totalPlayers,
+    touchedNewContent: touchedCount,
+    touchedRate: Math.round((touchedCount / totalPlayers) * 10000) / 100,
+    multiContentPlayers: multiContentCount,
+    multiContentRate: Math.round((multiContentCount / totalPlayers) * 10000) / 100,
+    allContentPlayers: allContentCount,
+    allContentRate: Math.round((allContentCount / totalPlayers) * 10000) / 100,
+    deepEngagedPlayers: deepPlayerSet.size,
+    deepEngagedRate: Math.round((deepPlayerSet.size / totalPlayers) * 10000) / 100,
   };
 }
 
-function analyzeRetentionImpact(contentExp, loginRecords, players) {
+function analyzeRetentionImpact(expByPlayer, loginByPlayer, players) {
   // 比较参与了版本新内容和没参与的玩家的留存率
-  const participatedPlayers = new Set(contentExp.map(r => r.playerId));
+  const participatedIds = new Set(expByPlayer.keys());
 
-  const getRetention = (playerIds) => {
-    let day7 = 0, day14 = 0, day28 = 0, total = 0;
-    for (const pid of playerIds) {
-      const records = loginRecords.filter(r => r.playerId === pid);
-      const days = new Set(records.map(r => r.day));
-      total++;
-      if (days.has(7)) day7++;
-      if (days.has(14)) day14++;
-      if (days.has(28)) day28++;
+  // 一次遍历计算两组留存，不再调用多次 getRetention
+  let pDay7 = 0, pDay14 = 0, pDay28 = 0, pTotal = 0;
+  let nDay7 = 0, nDay14 = 0, nDay28 = 0, nTotal = 0;
+
+  for (const player of players) {
+    const pid = player.playerId;
+    const records = loginByPlayer.get(pid) || [];
+    const days = new Set();
+    for (const r of records) {
+      days.add(r.day);
     }
-    return {
-      count: total,
-      day7: total > 0 ? Math.round((day7 / total) * 10000) / 100 : 0,
-      day14: total > 0 ? Math.round((day14 / total) * 10000) / 100 : 0,
-      day28: total > 0 ? Math.round((day28 / total) * 10000) / 100 : 0,
-    };
+
+    const participated = participatedIds.has(pid);
+    if (participated) {
+      pTotal++;
+      if (days.has(7)) pDay7++;
+      if (days.has(14)) pDay14++;
+      if (days.has(28)) pDay28++;
+    } else {
+      nTotal++;
+      if (days.has(7)) nDay7++;
+      if (days.has(14)) nDay14++;
+      if (days.has(28)) nDay28++;
+    }
+  }
+
+  const pRet = {
+    count: pTotal,
+    day7: pTotal > 0 ? Math.round((pDay7 / pTotal) * 10000) / 100 : 0,
+    day14: pTotal > 0 ? Math.round((pDay14 / pTotal) * 10000) / 100 : 0,
+    day28: pTotal > 0 ? Math.round((pDay28 / pTotal) * 10000) / 100 : 0,
+  };
+  const nRet = {
+    count: nTotal,
+    day7: nTotal > 0 ? Math.round((nDay7 / nTotal) * 10000) / 100 : 0,
+    day14: nTotal > 0 ? Math.round((nDay14 / nTotal) * 10000) / 100 : 0,
+    day28: nTotal > 0 ? Math.round((nDay28 / nTotal) * 10000) / 100 : 0,
   };
 
-  const allPlayerIds = players.map(p => p.playerId);
-  const nonParticipated = allPlayerIds.filter(id => !participatedPlayers.has(id));
-
   return {
-    participatedRetention: getRetention([...participatedPlayers]),
-    nonParticipatedRetention: getRetention(nonParticipated),
+    participatedRetention: pRet,
+    nonParticipatedRetention: nRet,
     retentionLift: {
-      day7: Math.round(
-        (getRetention([...participatedPlayers]).day7 - getRetention(nonParticipated).day7) * 100
-      ) / 100,
-      day14: Math.round(
-        (getRetention([...participatedPlayers]).day14 - getRetention(nonParticipated).day14) * 100
-      ) / 100,
-      day28: Math.round(
-        (getRetention([...participatedPlayers]).day28 - getRetention(nonParticipated).day28) * 100
-      ) / 100,
+      day7: Math.round((pRet.day7 - nRet.day7) * 100) / 100,
+      day14: Math.round((pRet.day14 - nRet.day14) * 100) / 100,
+      day28: Math.round((pRet.day28 - nRet.day28) * 100) / 100,
     },
   };
 }
 
-function computeSatisfactionRanking(contentExp, versionInfo) {
+function computeSatisfactionRanking(expByContent, versionInfo) {
   const ranking = [];
   for (const content of versionInfo.newContentList) {
-    const records = contentExp.filter(r => r.contentId === content.id);
+    const records = expByContent.get(content.id) || [];
     if (records.length === 0) continue;
+
+    let sumSatisfaction = 0, sumCompletion = 0;
+    for (const r of records) {
+      sumSatisfaction += r.satisfaction;
+      sumCompletion += r.completionRate;
+    }
+    const count = records.length;
+
     ranking.push({
       contentId: content.id,
       name: content.name,
       type: content.type,
-      avgSatisfaction: avg(records.map(r => r.satisfaction)),
-      participantCount: records.length,
-      avgCompletionRate: Math.round(avg(records.map(r => r.completionRate)) * 10000) / 100,
+      avgSatisfaction: Math.round(sumSatisfaction / count * 100) / 100,
+      participantCount: count,
+      avgCompletionRate: Math.round(sumCompletion / count * 10000) / 100,
     });
   }
   return ranking.sort((a, b) => b.avgSatisfaction - a.avgSatisfaction);
 }
 
 function analyzeByType(contentExp, players) {
-  const types = [...new Set(contentExp.map(r => r.contentType))];
+  // 按 contentType 分组 — 一次遍历
+  const typeMap = new Map();
+  for (const r of contentExp) {
+    let group = typeMap.get(r.contentType);
+    if (!group) {
+      group = { records: [], playerSet: new Set() };
+      typeMap.set(r.contentType, group);
+    }
+    group.records.push(r);
+    group.playerSet.add(r.playerId);
+  }
+
+  const totalPlayers = players.length;
   const comparison = {};
 
-  for (const type of types) {
-    const records = contentExp.filter(r => r.contentType === type);
-    const uniquePlayers = new Set(records.map(r => r.playerId)).size;
+  for (const [type, { records, playerSet }] of typeMap) {
+    let sumTimes = 0, sumCompletion = 0, sumSatisfaction = 0, sumDuration = 0;
+    for (const r of records) {
+      sumTimes += r.participationTimes;
+      sumCompletion += r.completionRate;
+      sumSatisfaction += r.satisfaction;
+      sumDuration += r.avgDurationMinutes;
+    }
+    const count = records.length;
+
     comparison[type] = {
-      uniquePlayers,
-      participationRate: Math.round((uniquePlayers / players.length) * 10000) / 100,
-      avgTimes: avg(records.map(r => r.participationTimes)),
-      avgCompletion: Math.round(avg(records.map(r => r.completionRate)) * 10000) / 100,
-      avgSatisfaction: avg(records.map(r => r.satisfaction)),
-      avgDuration: avg(records.map(r => r.avgDurationMinutes)),
+      uniquePlayers: playerSet.size,
+      participationRate: Math.round((playerSet.size / totalPlayers) * 10000) / 100,
+      avgTimes: Math.round(sumTimes / count * 100) / 100,
+      avgCompletion: Math.round(sumCompletion / count * 10000) / 100,
+      avgSatisfaction: Math.round(sumSatisfaction / count * 100) / 100,
+      avgDuration: Math.round(sumDuration / count * 100) / 100,
     };
   }
 
   return comparison;
 }
 
-function analyzeFirstPlayDistribution(contentExp, versionInfo) {
+function analyzeFirstPlayDistribution(expByContent, versionInfo) {
   const distribution = {};
   for (const content of versionInfo.newContentList) {
-    const records = contentExp.filter(r => r.contentId === content.id);
+    const records = expByContent.get(content.id) || [];
     const dayBuckets = { 'Day1-3': 0, 'Day4-7': 0, 'Day8-14': 0, 'Day15-28': 0 };
     for (const r of records) {
       if (r.firstPlayDay <= 3) dayBuckets['Day1-3']++;
@@ -187,9 +254,18 @@ function analyzeFirstPlayDistribution(contentExp, versionInfo) {
   return distribution;
 }
 
-function avg(arr) {
-  if (arr.length === 0) return 0;
-  return Math.round(arr.reduce((a, b) => a + b, 0) / arr.length * 100) / 100;
+function groupBy(arr, key) {
+  const map = new Map();
+  for (const item of arr) {
+    const k = item[key];
+    let list = map.get(k);
+    if (!list) {
+      list = [];
+      map.set(k, list);
+    }
+    list.push(item);
+  }
+  return map;
 }
 
 module.exports = { analyzeContentExperience };
