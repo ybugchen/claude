@@ -39,7 +39,7 @@ function buildReport(cleanedData, cleanReport) {
   const segmentation = analyzeUserSegmentation(cleanedData);
   const contentAnalysis = analyzeContentExperience(cleanedData);
   const itemConversion = analyzeItemConversion(cleanedData);
-  const assessment = generateAssessment(segmentation, contentAnalysis, itemConversion, cleanReport);
+  const assessment = generateAssessment(segmentation, contentAnalysis, itemConversion, cleanReport, cleanedData.versionInfo);
 
   return {
     versionInfo: cleanedData.versionInfo,

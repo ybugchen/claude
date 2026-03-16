@@ -200,14 +200,17 @@ describe('Game Analytics - Item Conversion', () => {
 
 describe('Game Analytics - Assessment Engine', () => {
   let assessment;
+  let cleanedData;
 
   beforeEach(() => {
     const rawData = generateGameData();
-    const { cleanedData, cleanReport } = cleanGameData(rawData);
+    const cleaned = cleanGameData(rawData);
+    cleanedData = cleaned.cleanedData;
+    const cleanReport = cleaned.cleanReport;
     const segmentation = analyzeUserSegmentation(cleanedData);
     const contentAnalysis = analyzeContentExperience(cleanedData);
     const itemConversion = analyzeItemConversion(cleanedData);
-    assessment = generateAssessment(segmentation, contentAnalysis, itemConversion, cleanReport);
+    assessment = generateAssessment(segmentation, contentAnalysis, itemConversion, cleanReport, cleanedData.versionInfo);
   });
 
   test('should produce assessment with all sections', () => {
@@ -217,6 +220,8 @@ describe('Game Analytics - Assessment Engine', () => {
     expect(assessment.dataQuality).toBeDefined();
     expect(assessment.overallScore).toBeDefined();
     expect(assessment.recommendations).toBeDefined();
+    expect(assessment.planVsActual).toBeDefined();
+    expect(assessment.nextVersionSuggestions).toBeDefined();
   });
 
   test('scores should be between 0 and 100', () => {
@@ -251,6 +256,83 @@ describe('Game Analytics - Assessment Engine', () => {
       expect(priorityOrder[assessment.recommendations[i - 1].priority])
         .toBeLessThanOrEqual(priorityOrder[assessment.recommendations[i].priority]);
     }
+  });
+
+  test('planVsActual should contain overall and content metrics', () => {
+    const pva = assessment.planVsActual;
+    expect(pva.overallMetrics).toBeDefined();
+    expect(pva.overallMetrics.length).toBeGreaterThan(0);
+    expect(pva.overallAchievementRate).toBeGreaterThanOrEqual(0);
+    expect(pva.contentMetrics).toBeDefined();
+    expect(pva.contentMetrics.length).toBeGreaterThan(0);
+    expect(pva.goalReview).toBeDefined();
+    expect(pva.goalReview.length).toBeGreaterThan(0);
+
+    // Each overall metric should have target, actual, gap, status
+    for (const m of pva.overallMetrics) {
+      expect(m).toHaveProperty('metric');
+      expect(m).toHaveProperty('target');
+      expect(m).toHaveProperty('actual');
+      expect(m).toHaveProperty('gap');
+      expect(m).toHaveProperty('status');
+      expect(['达标', '接近', '未达标']).toContain(m.status);
+    }
+  });
+
+  test('planVsActual content metrics should have dimensions and achievement status', () => {
+    for (const cm of assessment.planVsActual.contentMetrics) {
+      expect(cm).toHaveProperty('contentId');
+      expect(cm).toHaveProperty('name');
+      expect(cm).toHaveProperty('designGoal');
+      expect(cm).toHaveProperty('dimensions');
+      expect(cm.dimensions.length).toBeGreaterThan(0);
+      expect(cm).toHaveProperty('achievementRate');
+      expect(['全部达标', '部分达标', '多数未达标']).toContain(cm.overallStatus);
+    }
+  });
+
+  test('planVsActual goalReview should assess each version goal', () => {
+    for (const gr of assessment.planVsActual.goalReview) {
+      expect(gr).toHaveProperty('goal');
+      expect(gr).toHaveProperty('assessment');
+      expect(gr.assessment).toHaveProperty('status');
+      expect(gr.assessment).toHaveProperty('evidence');
+    }
+  });
+
+  test('nextVersionSuggestions should have required fields', () => {
+    expect(assessment.nextVersionSuggestions.length).toBeGreaterThan(0);
+    for (const s of assessment.nextVersionSuggestions) {
+      expect(s).toHaveProperty('category');
+      expect(s).toHaveProperty('priority');
+      expect(s).toHaveProperty('insight');
+      expect(s).toHaveProperty('suggestion');
+      expect(s).toHaveProperty('rationale');
+    }
+  });
+
+  test('nextVersionSuggestions should be sorted by priority', () => {
+    const priorityOrder = { '高': 0, '中': 1, '低': 2 };
+    for (let i = 1; i < assessment.nextVersionSuggestions.length; i++) {
+      expect(priorityOrder[assessment.nextVersionSuggestions[i - 1].priority])
+        .toBeLessThanOrEqual(priorityOrder[assessment.nextVersionSuggestions[i].priority]);
+    }
+  });
+
+  test('should work without planningContext (graceful fallback)', () => {
+    const rawData = generateGameData();
+    const { cleanedData: cd, cleanReport: cr } = cleanGameData(rawData);
+    // Remove planningContext
+    const versionInfoNoPlan = { ...cd.versionInfo };
+    delete versionInfoNoPlan.planningContext;
+    const seg = analyzeUserSegmentation(cd);
+    const ca = analyzeContentExperience(cd);
+    const ic = analyzeItemConversion(cd);
+    const result = generateAssessment(seg, ca, ic, cr, versionInfoNoPlan);
+
+    expect(result.planVsActual).toBeNull();
+    expect(result.nextVersionSuggestions).toBeDefined();
+    expect(result.nextVersionSuggestions.length).toBeGreaterThan(0);
   });
 });
 

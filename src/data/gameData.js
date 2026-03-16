@@ -17,6 +17,76 @@ function generateGameData() {
       { id: 'skin_dragon', name: '龙鳞套装', type: 'skin' },
       { id: 'pet_baby_dragon', name: '小龙宠物', type: 'pet' },
     ],
+    // 版本内容策划上下文
+    planningContext: {
+      // 版本整体策划目标
+      versionGoals: [
+        '通过龙渊副本+九头蛇BOSS提升核心PVE活跃和留存',
+        '通过龙鳞套装和小龙宠物拉动中R以上付费',
+        '通过春日祭活动促进免费玩家向小R转化',
+        '通过主线剧情延长玩家在线时长和内容消费深度',
+      ],
+      // 版本预期目标指标
+      targetMetrics: {
+        day7Retention: 55,
+        day28Retention: 35,
+        payingRate: 12,
+        arppu: 180,
+        arpu: 22,
+        avgOnlineMinutes: 35,
+      },
+      // 每个内容的策划意图与目标
+      contentDesignIntent: {
+        dungeon_dragon: {
+          designGoal: '核心PVE循环内容，拉动日常活跃和长线留存',
+          targetParticipationRate: 65,
+          targetCompletionRate: 55,
+          targetSatisfaction: 3.8,
+          targetAvgTimes: 8,
+        },
+        boss_hydra: {
+          designGoal: '高难度挑战内容，满足核心玩家成就需求，刺激装备/消耗品付费',
+          targetParticipationRate: 45,
+          targetCompletionRate: 35,
+          targetSatisfaction: 3.5,
+          targetAvgTimes: 5,
+        },
+        quest_chain_1: {
+          designGoal: '叙事驱动内容，引导玩家了解版本世界观，延长在线时长',
+          targetParticipationRate: 70,
+          targetCompletionRate: 75,
+          targetSatisfaction: 4.0,
+          targetAvgTimes: 2,
+        },
+        event_spring: {
+          designGoal: '限时活动，拉动全层级玩家回流，促进首充和小额付费转化',
+          targetParticipationRate: 75,
+          targetCompletionRate: 60,
+          targetSatisfaction: 4.2,
+          targetAvgTimes: 10,
+        },
+        skin_dragon: {
+          designGoal: '外观付费内容，面向中R以上玩家，拉动套装礼包销售',
+          targetParticipationRate: 30,
+          targetCompletionRate: 90,
+          targetSatisfaction: 4.0,
+          targetAvgTimes: 1,
+        },
+        pet_baby_dragon: {
+          designGoal: '收集养成内容，提升情感粘性和日常登录动力',
+          targetParticipationRate: 35,
+          targetCompletionRate: 85,
+          targetSatisfaction: 4.3,
+          targetAvgTimes: 1,
+        },
+      },
+      // 上一版本遗留问题（供下版本建议参考）
+      previousVersionIssues: [
+        '上版本副本难度过高导致中低层级玩家流失',
+        '上版本活动奖励不足导致参与率仅45%',
+        '上版本缺少社交玩法导致在线时长偏低',
+      ],
+    },
   };
 
   const playerLevels = ['新手', '初级', '中级', '高级', '核心'];
