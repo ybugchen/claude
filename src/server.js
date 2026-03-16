@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const todoRoutes = require('./routes/todos');
+const analyticsRoutes = require('./routes/analytics');
+const adsRoutes = require('./routes/ads');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,6 +15,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Routes
 app.use('/api/todos', todoRoutes);
+app.use('/api/ads/analytics', analyticsRoutes);
+app.use('/api/ads', adsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

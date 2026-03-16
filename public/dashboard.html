@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据仪表盘 - 跨平台广告分析</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="ads-styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body class="dashboard-body">
+  <div class="container wide">
+    <header>
+      <h1>数据仪表盘</h1>
+      <p class="subtitle">跨平台广告效果分析与可视化</p>
+      <nav class="nav-bar">
+        <a href="index.html">任务列表</a>
+        <a href="ads.html">广告管理</a>
+        <a href="dashboard.html" class="active">数据仪表盘</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="filter-bar">
+        <select id="filterPlatform" onchange="refreshDashboard()">
+          <option value="">全部平台</option>
+          <option value="google">Google 广告</option>
+          <option value="meta">Meta 广告</option>
+          <option value="tiktok">TikTok 广告</option>
+          <option value="twitter">Twitter 广告</option>
+          <option value="linkedin">LinkedIn 广告</option>
+        </select>
+      </div>
+
+      <div class="kpi-grid" id="kpiGrid">
+        <div class="kpi-card spend">
+          <div class="kpi-label">总花费</div>
+          <div class="kpi-value" id="kpiSpend">¥0</div>
+        </div>
+        <div class="kpi-card revenue">
+          <div class="kpi-label">总收入</div>
+          <div class="kpi-value" id="kpiRevenue">¥0</div>
+        </div>
+        <div class="kpi-card impressions">
+          <div class="kpi-label">总展示</div>
+          <div class="kpi-value" id="kpiImpressions">0</div>
+        </div>
+        <div class="kpi-card clicks">
+          <div class="kpi-label">总点击</div>
+          <div class="kpi-value" id="kpiClicks">0</div>
+        </div>
+        <div class="kpi-card conversions">
+          <div class="kpi-label">总转化</div>
+          <div class="kpi-value" id="kpiConversions">0</div>
+        </div>
+        <div class="kpi-card ctr">
+          <div class="kpi-label">CTR</div>
+          <div class="kpi-value" id="kpiCTR">0%</div>
+        </div>
+        <div class="kpi-card cpc">
+          <div class="kpi-label">CPC</div>
+          <div class="kpi-value" id="kpiCPC">¥0</div>
+        </div>
+        <div class="kpi-card roas">
+          <div class="kpi-label">ROAS</div>
+          <div class="kpi-value" id="kpiROAS">0x</div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>各平台花费与收入对比</h3>
+          <canvas id="spendRevenueChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>各平台花费占比</h3>
+          <canvas id="spendPieChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>各平台 CTR 对比</h3>
+          <canvas id="ctrChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>各平台 ROAS 对比</h3>
+          <canvas id="roasChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card full-width" style="margin-bottom: 24px;">
+        <h3>ROAS 排名 Top 10 最佳广告</h3>
+        <div class="table-wrapper">
+          <table class="top-table">
+            <thead>
+              <tr>
+                <th>排名</th>
+                <th>平台</th>
+                <th>活动名称</th>
+                <th>广告名称</th>
+                <th>花费</th>
+                <th>收入</th>
+                <th>CTR</th>
+                <th>ROAS</th>
+              </tr>
+            </thead>
+            <tbody id="topPerformersBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>跨平台广告分析系统 | Powered by Claude Code</p>
+    </footer>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
